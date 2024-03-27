@@ -1,6 +1,9 @@
 package pt.isel
 
 import kotlin.reflect.KClass
+import kotlin.reflect.KParameter
+import kotlin.reflect.full.memberProperties
+import kotlin.reflect.full.primaryConstructor
 
 /**
  * A YamlParser that uses reflection to parse objects.
@@ -28,6 +31,32 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
      * that has all the mandatory parameters in the map and optional parameters for the rest.
      */
     override fun newInstance(args: Map<String, Any>): T {
-        TODO("Not yet implemented")
+        // Get the primary constructor of type T
+
+        val key=yamlParsers.entries.find { (k,v) -> v== this }?.key ?: throw IllegalArgumentException()
+        val constructor = key
+            .constructors
+            .firstOrNull{ constructor ->
+                constructor
+                    .parameters
+                    .filter{ !it.isOptional }//TODO if they give optional?
+                    .all{param -> args.containsKey(param.name) }
+            }?: throw IllegalArgumentException()
+
+        return constructor.callBy(args as Map<KParameter, Any?>) as T
     }
+
+    /***
+     *  private val destCtor = destType
+     *         .constructors
+     *         .first { ctor ->
+     *             ctor
+     *                 .parameters
+     *                 .filter { !it.isOptional }
+     *                 .all { param -> srcType
+     *                     .memberProperties
+     *                     .any { it.name == param.name && it.returnType == param.type}
+     *                 }
+     *         }
+     */
 }
