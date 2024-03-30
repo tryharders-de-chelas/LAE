@@ -2,8 +2,7 @@ package pt.isel
 
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
-import kotlin.reflect.full.memberProperties
-import kotlin.reflect.full.primaryConstructor
+import kotlin.reflect.jvm.jvmErasure
 
 /**
  * A YamlParser that uses reflection to parse objects.
@@ -33,7 +32,7 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
     override fun newInstance(args: Map<String, Any>): T {
         // Get the primary constructor of type T
 
-        val key=yamlParsers.entries.find { (k,v) -> v== this }?.key ?: throw IllegalArgumentException()
+        val key=yamlParsers.entries.find { (_,v) -> v== this }?.key ?: throw IllegalArgumentException()
         val constructor = key
             .constructors
             .firstOrNull{ constructor ->
@@ -43,7 +42,54 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
                     .all{param -> args.containsKey(param.name) }
             }?: throw IllegalArgumentException()
 
-        return constructor.callBy(args as Map<KParameter, Any?>) as T
+        val ctorParams = mutableMapOf<KParameter, Any?>()
+        for (param in constructor.parameters.filter { !it.isOptional && it.name in args}){
+            // TODO: Is that filter necessary??
+            println("${param.name} is ${param.type}")
+            ctorParams[param] = convertType(args[param.name]!!, param.type.jvmErasure)
+        }
+        println(ctorParams)
+        return constructor.callBy(ctorParams) as T
+    }
+
+    private fun convertType(value: Any, targetType: KClass<*>): Any {
+        println("Casting ${value} from ${value::class} to $targetType")
+        if(targetType.isInstance(value))
+            return value
+
+        // TODO: Can we assume we will only be getting Ints?
+        val ans = when (targetType) {
+            String::class -> value.toString()
+            Int::class -> {
+                when (value) {
+                    is String -> value.toIntOrNull()
+                    is Int -> value
+                    is Long -> value.toInt()
+                    is Char -> value.code
+                    else -> null
+                }
+            }
+            Long::class -> {
+                when (value) {
+                    is String -> value.toLongOrNull()
+                    is Int -> value.toLong()
+                    is Long -> value
+                    is Char -> value.code.toLong()
+                    else -> null
+                }
+            }
+            Char::class -> {
+                when (value) {
+                    is String -> value.firstOrNull()
+                    is Int -> value.toChar()
+                    is Long -> value.toInt().toChar()
+                    is Char -> value
+                    else -> null
+                }
+            }
+            else -> null // Unsupported target type
+        }
+        return ans as Any
     }
 
     /***

@@ -19,7 +19,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         val paramsMap = mutableMapOf<String, Any>()
         //val x=yaml.readLines()
         yaml.readLines().forEach {
-            if(!it.isBlank()) {
+            if(it.isNotBlank()) {
                 val (arg, param) = it.trimIndent().split(": ")
                 paramsMap[arg] = param
             }
@@ -28,7 +28,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
     }
 
     final override fun parseList(yaml: Reader): List<T> {
-        TODO("Not yet implemented")
+        TODO()
     }
 
 }
