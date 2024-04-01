@@ -14,18 +14,41 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
      */
     abstract fun newInstance(args: Map<String, Any>): T
 
+    private fun List<String>.parseToHashmap(): Map<String, Any> {
+        val parametersMap = mutableMapOf<String, Any>()
+        // TODO: Make this work with deeper nesting
+        var currentKey = ""
 
-    final override fun parseObject(yaml: Reader): T {
-        val paramsMap = mutableMapOf<String, Any>()
-        //val x=yaml.readLines()
-        yaml.readLines().forEach {
-            if(it.isNotBlank()) {
-                val (arg, param) = it.trimIndent().split(": ")
-                paramsMap[arg] = param
+        for(line in this){
+            if (line.isBlank())
+                continue
+
+            val (argument, parameter) = line.split(":")
+
+            if(!argument.startsWith("  "))
+                currentKey = ""
+
+            if(parameter.isEmpty()) {
+                val nestedMap = mutableMapOf<String, Any>()
+                parametersMap[argument] = nestedMap
+                currentKey = argument
+            } else {
+                if(currentKey in parametersMap && parametersMap[currentKey] is MutableMap<*, *>){
+                    (parametersMap[currentKey] as MutableMap<String, Any>)[argument.trim()] = parameter.trim()
+                } else {
+                    parametersMap[argument] = parameter
+                }
             }
         }
-        return newInstance(paramsMap)
+        return parametersMap
     }
+
+    final override fun parseObject(yaml: Reader): T {
+
+        val args = yaml.readText().trimIndent().lines().parseToHashmap()
+        return newInstance(args)
+    }
+
 
     final override fun parseList(yaml: Reader): List<T> {
         TODO()
