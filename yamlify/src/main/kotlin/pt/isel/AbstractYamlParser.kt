@@ -2,6 +2,7 @@ package pt.isel
 
 import java.io.Reader
 import kotlin.reflect.KClass
+import kotlin.reflect.full.primaryConstructor
 
 abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlParser<T> {
     /**
@@ -51,7 +52,57 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
 
 
     final override fun parseList(yaml: Reader): List<T> {
-        TODO()
+        val args = yaml.readText().trimIndent().lines()
+        val resultList = mutableListOf<T>()
+
+        val listArguments = mutableListOf<String>()
+        var inList = false
+
+        for (line in args) {
+
+
+            if (line.trimStart().startsWith("-")) {
+                val newLine = line.removePrefix("-").trim()
+                if (newLine.isBlank()) {
+                    inList = true
+                } else {
+                    val map = parseSingleObject(newLine)
+                    resultList.add(newInstance(map))
+                    inList = false
+                }
+                if (listArguments.isNotEmpty()) {
+                    val map = listArguments.parseToHashmap()
+                    resultList.add(newInstance(map))
+                    listArguments.clear()
+                }
+                listArguments.add(line)
+            } else {
+                if (inList) {
+                    listArguments.add(line)
+                } else {
+                    val map = parseSingleObject(line)
+                    resultList.add(newInstance(map))
+                }
+            }
+        }
+
+        if (inList && listArguments.isNotEmpty()) {
+            val map = listArguments.parseToHashmap()
+            resultList.add(newInstance(map))
+        }
+
+        return resultList
     }
+
+    private fun parseSingleObject(line: String): T {
+        return when(type){
+            Int::class -> line.toInt() as T
+            Long::class -> line.toLong() as T
+
+            else -> line as T
+        }
+    }
+
+
 
 }
