@@ -14,6 +14,14 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
      */
     abstract fun newInstance(args: Map<String, Any>): T
 
+    private fun isPrimitiveType(cls: KClass<*>): Boolean {
+        return cls.javaPrimitiveType != null
+    }
+
+    private fun isStringType(cls: KClass<*>): Boolean {
+        return cls == String::class
+    }
+
     private fun List<String>.parseToHashmap(): Map<String, Any> {
         val parametersMap = mutableMapOf<String, Any>()
         // TODO: Make this work with deeper nesting
@@ -40,7 +48,15 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 }
             }
         }
-        return parametersMap
+        return parametersMap.toMap()
+    }
+
+    private fun List<String>.parseValues(): Map<String, Any> {
+        val parameterMap = mutableMapOf<String, Any>()
+        for(line in this){
+            parameterMap[line] = line
+        }
+        return parameterMap.toMap()
     }
 
     final override fun parseObject(yaml: Reader): T {
@@ -51,7 +67,18 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
 
 
     final override fun parseList(yaml: Reader): List<T> {
-        TODO()
+        val l = mutableListOf<T>()
+        val objects = yaml.readText().split("-").filter { it.isNotBlank() }
+        if(isStringType(type) || isPrimitiveType(type)){
+            for (obj in objects){
+                l.add(convertType(obj.trim(), type) as T)
+            }
+        } else {
+            for (obj in objects){
+                val args = obj.trimIndent().lines().parseToHashmap()
+                l += newInstance(args)
+            }
+        }
+        return l
     }
-
 }
