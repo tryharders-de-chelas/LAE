@@ -2,6 +2,7 @@ package pt.isel
 
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
+import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.jvmErasure
 
 /**
@@ -48,6 +49,8 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
         for (param in constructor.parameters.filter { !it.isOptional }){
             ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
         }
+        //then primary
+        if(ctorParams.isEmpty())  ctorParams[0]=key.primaryConstructor!!
 
         // TODO: Refactor this
         val ctorOtherParams = constructor.parameters.filter{ it.isOptional }.map { it.name }

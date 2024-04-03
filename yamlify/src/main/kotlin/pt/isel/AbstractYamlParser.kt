@@ -60,7 +60,6 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
 
         for (line in args) {
 
-
             if (line.trimStart().startsWith("-")) {
                 val newLine = line.removePrefix("-").trim()
                 if (newLine.isBlank()) {
@@ -94,13 +93,16 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         return resultList
     }
 
-    private fun parseSingleObject(line: String): T {
-        return when(type){
+    private fun parseSingleObject(line: String): Map<String,Any> {
+        return mapOf<String,Any>(line to type)
+      /*  return when(type){
             Int::class -> line.toInt() as T
             Long::class -> line.toLong() as T
 
             else -> line as T
         }
+
+       */
     }
 
 
