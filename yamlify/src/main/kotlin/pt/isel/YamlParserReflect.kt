@@ -1,6 +1,8 @@
 package pt.isel
 
 import kotlin.reflect.KClass
+import kotlin.reflect.KParameter
+import kotlin.reflect.jvm.jvmErasure
 
 /**
  * A YamlParser that uses reflection to parse objects.
@@ -28,6 +30,44 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
      * that has all the mandatory parameters in the map and optional parameters for the rest.
      */
     override fun newInstance(args: Map<String, Any>): T {
-        TODO("Not yet implemented")
+
+        val key = yamlParsers.entries.find { (_,v) -> v== this }?.key ?: throw IllegalArgumentException()
+
+        println("newInstance")
+        val constructor = key
+            .constructors
+            .firstOrNull{ constructor ->
+                constructor
+                    .parameters
+                    .filter{ !it.isOptional }//TODO if they give optional?
+                    .all{param -> args.containsKey(param.name) }
+            }?: throw IllegalArgumentException()
+
+        val ctorParams = mutableMapOf<KParameter, Any?>()
+
+        for (param in constructor.parameters.filter { !it.isOptional || (it.isOptional && args.containsKey(it.name)) }){
+            when{
+                param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
+                    ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
+                }
+                param.type.jvmErasure == Sequence::class -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
+                    ctorParams[param] =
+                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
+                }
+                param.type.jvmErasure == List::class -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
+                    ctorParams[param] =
+                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }
+                }
+                else -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.jvmErasure)
+                    ctorParams[param] = parser.newInstance(args[param.name] as Map<String, Any>)
+                }
+            }
+
+        }
+
+        return constructor.callBy(ctorParams) as T
     }
 }
