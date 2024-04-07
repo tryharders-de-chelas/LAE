@@ -45,20 +45,27 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
 
         val ctorParams = mutableMapOf<KParameter, Any?>()
 
-        for (param in constructor.parameters.filter { !it.isOptional }){
-            ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
-        }
+        for (param in constructor.parameters.filter { !it.isOptional || (it.isOptional && args.containsKey(it.name)) }){
+            when{
+                param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
+                    ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
+                }
+                param.type.jvmErasure == Sequence::class -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
+                    ctorParams[param] =
+                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
+                }
+                param.type.jvmErasure == List::class -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
+                    ctorParams[param] =
+                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }
+                }
+                else -> {
+                    val parser = YamlParserReflect.yamlParser(param.type.jvmErasure)
+                    ctorParams[param] = parser.newInstance(args[param.name] as Map<String, Any>)
+                }
+            }
 
-        // TODO: Refactor this
-        val ctorOtherParams = constructor.parameters.filter{ it.isOptional }.map { it.name }
-        val optionalParams = args.keys.filter { it in ctorOtherParams }
-        for (element in optionalParams){
-            val nested = constructor.parameters.first { it.name == element }
-            val smth = args[element] as Map<String, Any>
-            ctorParams[nested] =
-                YamlParserReflect.
-                yamlParser(nested.type.classifier as KClass<*>).
-                newInstance(smth)
         }
 
         return constructor.callBy(ctorParams) as T

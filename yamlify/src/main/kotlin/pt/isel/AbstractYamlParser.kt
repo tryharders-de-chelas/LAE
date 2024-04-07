@@ -22,32 +22,81 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         return cls == String::class
     }
 
+    private fun countLeadingSpaces(input: String): Int {
+        var count = 0
+        for (char in input) {
+            if (char.isWhitespace()) {
+                count++
+            } else {
+                break
+            }
+        }
+        return count
+    }
+
     private fun List<String>.parseToHashmap(): Map<String, Any> {
         val parametersMap = mutableMapOf<String, Any>()
         // TODO: Make this work with deeper nesting
-        var currentKey = ""
-
+        val baseDepth = countLeadingSpaces(this.first())
+        var nested = ""
+        val nestedLines = mutableListOf<String>()
+        val l = mutableListOf<Map<String, Any>>()
+        var listMode = false
         for(line in this){
             if (line.isBlank())
                 continue
 
-            val (argument, parameter) = line.split(":")
-
-            if(!argument.startsWith("  "))
-                currentKey = ""
-
-            if(parameter.isEmpty()) {
-                val nestedMap = mutableMapOf<String, Any>()
-                parametersMap[argument] = nestedMap
-                currentKey = argument
-            } else {
-                if(currentKey in parametersMap && parametersMap[currentKey] is MutableMap<*, *>){
-                    (parametersMap[currentKey] as MutableMap<String, Any>)[argument.trim()] = parameter.trim()
+            if(listMode){
+                if(baseDepth < countLeadingSpaces(line)){
+                    if(line.startsWith(" ".repeat(baseDepth) + " ".repeat(2) + "-")){
+                        l.add(nestedLines.parseToHashmap())
+                        nestedLines.clear()
+                        //listMode = false
+                    } else {
+                        nestedLines.add(line)
+                    }
+                    continue
                 } else {
-                    parametersMap[argument] = parameter
+                    parametersMap[nested] = l
+                    nested = ""
+                    nestedLines.clear()
+                    listMode = false
                 }
             }
+
+            if(line.startsWith(" ".repeat(baseDepth) + " ".repeat(2) + "-")){
+                listMode = true
+                continue
+            }
+
+            val (argument, parameter) = line.split(":")
+
+            if(parameter.isBlank()){
+                nested = argument.trim()
+            }
+
+            if(baseDepth < countLeadingSpaces(line) && nested.isNotBlank()){
+                nestedLines.add(line)
+                continue
+            }
+
+            if(nestedLines.isNotEmpty()){
+                parametersMap[nested] = nestedLines.parseToHashmap()
+                nested = ""
+                nestedLines.clear()
+                listMode = false
+            }
+
+            parametersMap[argument.trim()] = parameter.trim()
         }
+
+        if(l.isNotEmpty()){
+            if(nestedLines.isNotEmpty())
+                l.add(nestedLines.parseToHashmap())
+            parametersMap[nested] = l
+        }
+
+        val x = 1
         return parametersMap.toMap()
     }
 
@@ -60,24 +109,41 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
     }
 
     final override fun parseObject(yaml: Reader): T {
-
-        val args = yaml.readText().trimIndent().lines().parseToHashmap()
-        return newInstance(args)
+        val args = yaml.readText().trimIndent().lines()
+        val hm = args.parseToHashmap()
+        return newInstance(hm)
     }
 
 
     final override fun parseList(yaml: Reader): List<T> {
         val l = mutableListOf<T>()
-        val objects = yaml.readText().split("-").filter { it.isNotBlank() }
         if(isStringType(type) || isPrimitiveType(type)){
+            val objects = yaml.readText().split("-").filter { it.isNotBlank() }
             for (obj in objects){
                 l.add(convertType(obj.trim(), type) as T)
             }
         } else {
-            for (obj in objects){
-                val args = obj.trimIndent().lines().parseToHashmap()
-                l += newInstance(args)
+            val nestedLines = mutableListOf<String>()
+            val objects = yaml.readText().trimIndent().lines()
+            for(line in objects){
+                if(line.startsWith("-")){
+                    if(nestedLines.isNotEmpty()){
+                        val obj = newInstance(nestedLines.parseToHashmap())
+                        l.add(obj)
+                        nestedLines.clear()
+                    }
+                    continue
+                }
+
+                nestedLines.add(line)
             }
+
+            if(nestedLines.isNotEmpty()){
+                val obj = newInstance(nestedLines.parseToHashmap())
+                l.add(obj)
+                nestedLines.clear()
+            }
+
         }
         return l
     }
