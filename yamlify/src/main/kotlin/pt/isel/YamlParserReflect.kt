@@ -31,7 +31,7 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
      */
     override fun newInstance(args: Map<String, Any>): T {
 
-        val key = yamlParsers.entries.find { (_,v) -> v== this }?.key ?: throw IllegalArgumentException()
+        val key = yamlParsers.entries.find { (_, v) -> v == this }?.key ?: throw IllegalArgumentException()
 
         println("newInstance")
         val constructor = key
@@ -51,23 +51,35 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
                     ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
                 }
                 param.type.jvmErasure == Sequence::class -> {
-                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
                     ctorParams[param] =
-                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
+                        createParserAndInstanceForCollection(
+                            param.type.arguments.first().type!!.jvmErasure,
+                            args[param.name]!!
+                        ).asSequence()
+
                 }
                 param.type.jvmErasure == List::class -> {
-                    val parser = YamlParserReflect.yamlParser(param.type.arguments.first().type!!.jvmErasure)
                     ctorParams[param] =
-                        (args[param.name] as Iterable<Map<String, Any>>).map { parser.newInstance(it) }
+                        createParserAndInstanceForCollection(
+                            param.type.arguments.first().type!!.jvmErasure,
+                            args[param.name]!!
+                        )
                 }
                 else -> {
-                    val parser = YamlParserReflect.yamlParser(param.type.jvmErasure)
-                    ctorParams[param] = parser.newInstance(args[param.name] as Map<String, Any>)
+                    ctorParams[param] = createParserAndInstance(param.type.jvmErasure, args[param.name]!!)
                 }
             }
-
         }
 
         return constructor.callBy(ctorParams) as T
     }
+
+
+    private fun createParserAndInstance(paramType: KClass<*>, args: Any) =
+        YamlParserReflect.yamlParser(paramType).newInstance(args as Map<String, Any>)
+
+    private fun createParserAndInstanceForCollection(paramType: KClass<*>, args: Any) =
+        (args as Iterable<Map<String, Any>>).map {
+            YamlParserReflect.yamlParser(paramType).newInstance(it)
+        }
 }

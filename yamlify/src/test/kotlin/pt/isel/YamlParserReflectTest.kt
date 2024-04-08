@@ -2,6 +2,7 @@ package pt.isel
 
 import org.junit.jupiter.api.assertThrows
 import pt.isel.test.Classroom
+import pt.isel.test.Person
 import pt.isel.test.Student
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -152,6 +153,64 @@ class YamlParserReflectTest {
         assertEquals("i45", cr.id)
         assertStudentsInSequence(cr.students.iterator())
     }
+
+    @Test
+    fun parsePerson(){
+        val yaml = """
+            name: Maria Candida
+            age: 20
+            address:
+              street: Rua Rosa
+              nr: 78
+              city: Lisbon
+            Country: Portugal
+        """
+        val person = YamlParserReflect.yamlParser(Person::class).parseObject(yaml.reader())
+        assertEquals("Maria Candida", person.name)
+        assertEquals(20, person.age)
+        assertEquals("Portugal", person.from)
+        assertEquals("Rua Rosa", person.address.street)
+        assertEquals(78, person.address.nr)
+        assertEquals("Lisbon", person.address.city)
+    }
+
+    @Test
+    fun parseListOfPersons(){
+        val yaml = """
+            - name: Maria Candida
+              age: 20
+              address:
+                street: Rua Rosa
+                nr: 78
+                city: Lisbon
+              Country: Portugal
+            - name: Eugene Hopson
+              age: 25
+              address:
+                street: Pride Avenue
+                nr: 2638
+                city: Brooklyn
+              Country: USA
+        """
+        val persons = YamlParserReflect.yamlParser(Person::class).parseList(yaml.reader())
+        assertEquals(2, persons.size)
+        val p1 = persons[0]
+        assertEquals("Maria Candida", p1.name)
+        assertEquals(20, p1.age)
+        assertEquals("Portugal", p1.from)
+        assertEquals("Rua Rosa", p1.address.street)
+        assertEquals(78, p1.address.nr)
+        assertEquals("Lisbon", p1.address.city)
+        val p2 = persons[1]
+        assertEquals("Eugene Hopson", p2.name)
+        assertEquals(25, p2.age)
+        assertEquals("USA", p2.from)
+        assertEquals("Pride Avenue", p2.address.street)
+        assertEquals(2638, p2.address.nr)
+        assertEquals("Brooklyn", p2.address.city)
+    }
+
+
     private fun assertStudentsInSequence(seq: Iterator<Student>) {
         val st1 = seq.next()
         assertEquals("Maria Candida", st1.name)
