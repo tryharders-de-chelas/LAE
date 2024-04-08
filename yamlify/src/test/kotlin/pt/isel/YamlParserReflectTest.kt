@@ -177,20 +177,22 @@ class YamlParserReflectTest {
     @Test
     fun parseListOfPersons(){
         val yaml = """
-            - name: Maria Candida
-              age: 20
-              address:
-                street: Rua Rosa
-                nr: 78
-                city: Lisbon
-              Country: Portugal
-            - name: Eugene Hopson
-              age: 25
-              address:
-                street: Pride Avenue
-                nr: 2638
-                city: Brooklyn
-              Country: USA
+            - 
+                name: Maria Candida
+                age: 20
+                address:
+                    street: Rua Rosa
+                    nr: 78
+                    city: Lisbon
+                Country: Portugal
+            - 
+                name: Eugene Hopson
+                age: 25
+                address:
+                    street: Pride Avenue
+                    nr: 2638
+                    city: Brooklyn
+                Country: USA
         """
         val persons = YamlParserReflect.yamlParser(Person::class).parseList(yaml.reader())
         assertEquals(2, persons.size)

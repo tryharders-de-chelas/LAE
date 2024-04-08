@@ -2,6 +2,8 @@ package pt.isel
 
 import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
+import kotlin.reflect.KProperty
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.jvm.jvmErasure
 
 /**
@@ -29,49 +31,73 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
      * Creates a new instance of T through the first constructor
      * that has all the mandatory parameters in the map and optional parameters for the rest.
      */
+
+    private fun matchPropWithParam(srcProp: KProperty<*>, param: KParameter) : Boolean {
+        if(srcProp.name == param.name) {
+            return srcProp.returnType == param.type
+        }
+        val annot = srcProp.findAnnotation<YamlArg>() ?: return false
+        return annot.paramName == param.name && srcProp.returnType == param.type
+    }
+
+
     override fun newInstance(args: Map<String, Any>): T {
 
         val key = yamlParsers.entries.find { (_, v) -> v == this }?.key ?: throw IllegalArgumentException()
 
-        println("newInstance")
         val constructor = key
             .constructors
             .firstOrNull{ constructor ->
                 constructor
                     .parameters
-                    .filter{ !it.isOptional }//TODO if they give optional?
-                    .all{param -> args.containsKey(param.name) }
-            }?: throw IllegalArgumentException()
+                    .filter{ !it.isOptional } //TODO if they give optional?
+                    .all{
+                        param ->
+                        args.containsKey(param.name) ||
+                        args.containsKey(param.findAnnotation<YamlArg>()?.paramName)
+                    }
+            } ?: throw IllegalArgumentException()
 
-        val ctorParams = mutableMapOf<KParameter, Any?>()
-
-        for (param in constructor.parameters.filter { !it.isOptional || (it.isOptional && args.containsKey(it.name)) }){
+        val ctorParamsMap = mutableMapOf<KParameter, Any?>()
+        val ctorParams = constructor.parameters.filter { param ->
+            !param.isOptional ||
+            (param.isOptional && args.containsKey(param.name))
+        }
+        for (param in ctorParams){
+            val paramValue = args[param.name] ?: args[param.findAnnotation<YamlArg>()?.paramName] as KParameter
             when{
                 param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
-                    ctorParams[param] = convertType((args[param.name] as String).trim(), param.type.jvmErasure)
+                    ctorParamsMap[param] =
+                        convertType(
+                            (args[param.name] as String).trim(),
+                            param.type.jvmErasure
+                        )
                 }
                 param.type.jvmErasure == Sequence::class -> {
-                    ctorParams[param] =
+                    ctorParamsMap[param] =
                         createParserAndInstanceForCollection(
                             param.type.arguments.first().type!!.jvmErasure,
-                            args[param.name]!!
+                            paramValue
                         ).asSequence()
-
                 }
                 param.type.jvmErasure == List::class -> {
-                    ctorParams[param] =
+                    ctorParamsMap[param] =
                         createParserAndInstanceForCollection(
                             param.type.arguments.first().type!!.jvmErasure,
-                            args[param.name]!!
+                            paramValue
                         )
                 }
                 else -> {
-                    ctorParams[param] = createParserAndInstance(param.type.jvmErasure, args[param.name]!!)
+                    ctorParamsMap[param] =
+                        createParserAndInstance(
+                            param.type.jvmErasure,
+                            paramValue
+                        )
                 }
             }
         }
 
-        return constructor.callBy(ctorParams) as T
+        return constructor.callBy(ctorParamsMap) as T
     }
 
 
