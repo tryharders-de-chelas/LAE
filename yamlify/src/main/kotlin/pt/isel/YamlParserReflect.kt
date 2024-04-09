@@ -1,6 +1,7 @@
 package pt.isel
 
 import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.findAnnotation
@@ -72,7 +73,16 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
         for (param in ctorParams){
             val paramAnnotationValue = key.memberProperties.find{ it.name == param.name }?.findAnnotation<YamlArg>()?.paramName
             val paramValue = args[param.name] ?: args[paramAnnotationValue]!!
+            val converter = key.memberProperties.find{ it.name == param.name }?.findAnnotation<YamlConvert>()?.newClass
+
             when{
+                converter!=null -> {
+                    val tentati= converter.members.find{it.name== "parse" && it.parameters.size==1 && it.parameters.first.type.classifier==String::class} as KFunction<*>
+
+                    ctorParamsMap[param] =
+                            tentati.call(paramValue)
+                }
+
                 param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
                     ctorParamsMap[param] =
                         convertType((paramValue as String), param.type.jvmErasure)

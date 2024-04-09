@@ -1,9 +1,11 @@
 package pt.isel
 
 import org.junit.jupiter.api.assertThrows
+import pt.isel.test.Books
 import pt.isel.test.Classroom
 import pt.isel.test.School
 import pt.isel.test.Student
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -212,6 +214,17 @@ class YamlParserReflectTest {
         assertEquals(1911, s2.founded)
     }
 
+    @Test
+    fun ParseYamlConvert(){
+        val yaml = """
+            name: Dragao
+            date: 03-02-2004
+                """.trimIndent()
+        val schools = YamlParserReflect.yamlParser(Books::class).parseObject(yaml.reader())
+        val x= schools
+
+    }
+
 
     private fun assertStudentsInSequence(seq: Iterator<Student>) {
         val st1 = seq.next()
@@ -249,6 +262,11 @@ class YamlParserReflectTest {
         assertFalse { grades2.hasNext() }
         assertFalse { seq.hasNext() }
     }
+
+
+
+
+
 }
 
 const val yamlSequenceOfStudents = """
