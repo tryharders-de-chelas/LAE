@@ -2,7 +2,7 @@ package pt.isel
 
 import org.junit.jupiter.api.assertThrows
 import pt.isel.test.Classroom
-import pt.isel.test.Person
+import pt.isel.test.School
 import pt.isel.test.Student
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -155,61 +155,61 @@ class YamlParserReflectTest {
     }
 
     @Test
-    fun parsePerson(){
+    fun parseSchool(){
         val yaml = """
-            name: Maria Candida
-            age: 20
-            address:
-              street: Rua Rosa
-              nr: 78
-              city: Lisbon
-            Country: Portugal
-        """
-        val person = YamlParserReflect.yamlParser(Person::class).parseObject(yaml.reader())
-        assertEquals("Maria Candida", person.name)
-        assertEquals(20, person.age)
-        assertEquals("Portugal", person.from)
-        assertEquals("Rua Rosa", person.address.street)
-        assertEquals(78, person.address.nr)
-        assertEquals("Lisbon", person.address.city)
+            id: 2543
+            name: ISEL
+            location:
+                street: Rua Conselheiro Emídio Navarro
+                nr: 1
+                city: Lisbon
+            established: 1852
+        """.trimIndent()
+        val school = YamlParserReflect.yamlParser(School::class).parseObject(yaml.reader())
+        assertEquals(2543, school.id)
+        assertEquals("ISEL", school.name)
+        assertEquals("Rua Conselheiro Emídio Navarro", school.address.street)
+        assertEquals(1, school.address.nr)
+        assertEquals("Lisbon", school.address.city)
+        assertEquals(1852, school.founded)
     }
 
     @Test
-    fun parseListOfPersons(){
+    fun parseListOfSchools(){
         val yaml = """
             - 
-                name: Maria Candida
-                age: 20
-                address:
-                    street: Rua Rosa
-                    nr: 78
+                id: 2543
+                name: ISEL
+                location:
+                    street: Rua Conselheiro Emídio Navarro
+                    nr: 1
                     city: Lisbon
-                Country: Portugal
+                established: 1852
             - 
-                name: Eugene Hopson
-                age: 25
-                address:
-                    street: Pride Avenue
-                    nr: 2638
-                    city: Brooklyn
-                Country: USA
-        """
-        val persons = YamlParserReflect.yamlParser(Person::class).parseList(yaml.reader())
-        assertEquals(2, persons.size)
-        val p1 = persons[0]
-        assertEquals("Maria Candida", p1.name)
-        assertEquals(20, p1.age)
-        assertEquals("Portugal", p1.from)
-        assertEquals("Rua Rosa", p1.address.street)
-        assertEquals(78, p1.address.nr)
-        assertEquals("Lisbon", p1.address.city)
-        val p2 = persons[1]
-        assertEquals("Eugene Hopson", p2.name)
-        assertEquals(25, p2.age)
-        assertEquals("USA", p2.from)
-        assertEquals("Pride Avenue", p2.address.street)
-        assertEquals(2638, p2.address.nr)
-        assertEquals("Brooklyn", p2.address.city)
+                id: 7035
+                name: IST
+                location:
+                    street: Avenida Rovisco Pais
+                    nr: 1
+                    city: Lisbon
+                established: 1911
+        """.trimIndent()
+        val schools = YamlParserReflect.yamlParser(School::class).parseList(yaml.reader())
+        assertEquals(2, schools.size)
+        val s1 = schools[0]
+        assertEquals(2543, s1.id)
+        assertEquals("ISEL", s1.name)
+        assertEquals("Rua Conselheiro Emídio Navarro", s1.address.street)
+        assertEquals(1, s1.address.nr)
+        assertEquals("Lisbon", s1.address.city)
+        assertEquals(1852, s1.founded)
+        val s2 = schools[1]
+        assertEquals(7035, s2.id)
+        assertEquals("IST", s2.name)
+        assertEquals("Avenida Rovisco Pais", s2.address.street)
+        assertEquals(1, s2.address.nr)
+        assertEquals("Lisbon", s2.address.city)
+        assertEquals(1911, s2.founded)
     }
 
 

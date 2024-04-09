@@ -4,6 +4,7 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KParameter
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.memberProperties
 import kotlin.reflect.jvm.jvmErasure
 
 /**
@@ -50,49 +51,43 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
             .firstOrNull{ constructor ->
                 constructor
                     .parameters
-                    .filter{ !it.isOptional } //TODO if they give optional?
+                    .filter{ !it.isOptional }
                     .all{
                         param ->
                         args.containsKey(param.name) ||
-                        args.containsKey(param.findAnnotation<YamlArg>()?.paramName)
+                        args.containsKey(
+                            key.memberProperties.find{ matchPropWithParam(it, param) }?.findAnnotation<YamlArg>()?.paramName
+                        )
                     }
             } ?: throw IllegalArgumentException()
 
         val ctorParamsMap = mutableMapOf<KParameter, Any?>()
         val ctorParams = constructor.parameters.filter { param ->
-            !param.isOptional ||
-            (param.isOptional && args.containsKey(param.name))
+            args.containsKey(param.name) ||
+            args.containsKey(
+                key.memberProperties.find{ matchPropWithParam(it, param) }?.findAnnotation<YamlArg>()?.paramName
+            )
         }
+
         for (param in ctorParams){
-            val paramValue = args[param.name] ?: args[param.findAnnotation<YamlArg>()?.paramName] as KParameter
+            val paramAnnotationValue = key.memberProperties.find{ it.name == param.name }?.findAnnotation<YamlArg>()?.paramName
+            val paramValue = args[param.name] ?: args[paramAnnotationValue]!!
             when{
                 param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
                     ctorParamsMap[param] =
-                        convertType(
-                            (args[param.name] as String).trim(),
-                            param.type.jvmErasure
-                        )
+                        convertType((paramValue as String), param.type.jvmErasure)
                 }
                 param.type.jvmErasure == Sequence::class -> {
                     ctorParamsMap[param] =
-                        createParserAndInstanceForCollection(
-                            param.type.arguments.first().type!!.jvmErasure,
-                            paramValue
-                        ).asSequence()
+                        createParserAndInstanceForCollection(param.type.arguments.first().type!!.jvmErasure, paramValue).asSequence()
                 }
                 param.type.jvmErasure == List::class -> {
                     ctorParamsMap[param] =
-                        createParserAndInstanceForCollection(
-                            param.type.arguments.first().type!!.jvmErasure,
-                            paramValue
-                        )
+                        createParserAndInstanceForCollection(param.type.arguments.first().type!!.jvmErasure, paramValue)
                 }
                 else -> {
                     ctorParamsMap[param] =
-                        createParserAndInstance(
-                            param.type.jvmErasure,
-                            paramValue
-                        )
+                        createParserAndInstance(param.type.jvmErasure, paramValue)
                 }
             }
         }
