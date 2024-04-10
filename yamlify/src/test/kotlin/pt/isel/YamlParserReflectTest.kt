@@ -9,6 +9,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class YamlParserReflectTest {
 
@@ -218,10 +219,11 @@ class YamlParserReflectTest {
     fun ParseYamlConvert(){
         val yaml = """
             name: Dragao
-            date: 03-02-2004
+            date: 2004-02-02
                 """.trimIndent()
         val schools = YamlParserReflect.yamlParser(Books::class).parseObject(yaml.reader())
-        val x= schools
+        assertEquals( schools.name , "Dragao" )
+        assertEquals(  schools.date,LocalDate.of(2004, 2, 2) )
 
     }
 

@@ -84,6 +84,13 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             paramsMap[key.trim()] = value.trim()
         }
 
+        if (nestedLines.isNotEmpty()) {
+            paramsMap[currentKey] = nestedLines.parseToMap()
+            currentKey = ""
+            nestedLines.clear()
+            listMode = false
+        }
+
         if (nestedLists.isNotEmpty()) {
             if (nestedLines.isNotEmpty()) nestedLists.add(nestedLines.parseToMap())
             paramsMap[currentKey] = nestedLists
@@ -96,6 +103,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
 
     final override fun parseObject(yaml: Reader): T {
         val args = yaml.readText().trimIndent().lines()
+        val x= args.parseToMap()
         return newInstance(args.parseToMap())
     }
 
