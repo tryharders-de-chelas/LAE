@@ -65,9 +65,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             }
 
             val (key, value) = line.split(":")
-            if (value.isBlank()) {
-                currentKey = key.trim()
-            }
+
 
             if (countLeadingSpaces(line) > countLeadingSpaces(this.first()) && currentKey.isNotBlank()) {
                 nestedLines.add(line)
@@ -81,13 +79,15 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 listMode = false
             }
 
+            if (value.isBlank()) {
+                currentKey = key.trim()
+            }
+
             paramsMap[key.trim()] = value.trim()
         }
 
         if (nestedLines.isNotEmpty() && !listMode) {
             paramsMap[currentKey] = nestedLines.parseToMap()
-            currentKey = ""
-            nestedLines.clear()
         }
 
         if (nestedLists.isNotEmpty()) {
@@ -112,7 +112,6 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         if(isStringType() || isPrimitiveType()){
             val objects = yaml.readText().split("-").filter { it.isNotBlank() }
             for (obj in objects){
-                println("SUREEEEEEE")
                 resultList.add(convertType(obj.trim(), type) as T)
             }
         } else {
