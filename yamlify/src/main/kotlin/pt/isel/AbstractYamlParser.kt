@@ -113,6 +113,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         if(isStringType() || isPrimitiveType()){
             val objects = yaml.readText().split("-").filter { it.isNotBlank() }
             for (obj in objects){
+                println("SUREEEEEEE")
                 resultList.add(convertType(obj.trim(), type) as T)
             }
         } else {

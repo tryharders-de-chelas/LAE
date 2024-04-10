@@ -7,8 +7,9 @@ fun convertType(value: String, targetType: KClass<*>): Any? {
         return value
 
     // TODO: Can we assume we will only be getting Ints?
-    println("Converting $value from ${value::class} to $targetType")
+    //println("Converting $value from ${value::class} to $targetType")
     return when (targetType) {
+        Boolean::class -> value.toBooleanStrictOrNull()
         Char::class -> value.firstOrNull()
         Short::class -> value.toShortOrNull()
         Int::class -> value.toIntOrNull()
