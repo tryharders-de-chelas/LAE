@@ -10,7 +10,7 @@ import kotlin.reflect.jvm.jvmErasure
 /**
  * A YamlParser that uses reflection to parse objects.
  */
-class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) {
+class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : AbstractYamlParser<T>(type) {
     companion object {
         /**
          *Internal cache of YamlParserReflect instances.
@@ -45,7 +45,6 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
     override fun newInstance(args: Map<String, Any>): T {
 
         val key = yamlParsers.entries.find { (_, v) -> v == this }?.key ?: throw IllegalArgumentException()
-
         val constructor = key
             .constructors
             .firstOrNull{ constructor ->
@@ -63,11 +62,10 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
 
         val ctorParamsMap = mutableMapOf<KParameter, Any?>()
         val ctorParams = constructor.parameters.filter { param ->
-            !param.isOptional && (
             args.containsKey(param.name) ||
             args.containsKey(
                 key.memberProperties.find{ matchPropWithParam(it, param) }?.findAnnotation<YamlArg>()?.paramName
-            ))
+            )
         }
 
         for (param in ctorParams){
@@ -82,13 +80,11 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
                     val newClass = converter.newClass.primaryConstructor!!.callBy(emptyMap())
                     ctorParamsMap[param] =
                             converterFunc.call(newClass,paramValue)
-                            //converterFunc.call(converter.newClass.,(args[param.name] as Map<String, Any>).values.joinToString("\n"))
                 }
 
 
 
                 param.type.jvmErasure == String::class || param.type.jvmErasure.javaPrimitiveType != null -> {
-                    //println("YEAHHHHHHHHHH Converting $paramValue from ${paramValue::class} to ${param}")
                     ctorParamsMap[param] =
                         convertType((paramValue as String), param.type.jvmErasure)
                 }
@@ -112,11 +108,11 @@ class YamlParserReflect<T : Any>(type: KClass<T>) : AbstractYamlParser<T>(type) 
 
 
     private fun createParserAndInstance(paramType: KClass<*>, args: Any) =
-        YamlParserReflect.yamlParser(paramType).newInstance(args as Map<String, Any>)
+        yamlParser(paramType).newInstance(args as Map<String, Any>)
 
     private fun createParserAndInstanceForCollection(paramType: KClass<*>, args: Any) =
         (args as Iterable<Map<String, Any>>).map {
-            YamlParserReflect.yamlParser(paramType).newInstance(it)
+            yamlParser(paramType).newInstance(it)
         }
 
 

@@ -84,11 +84,10 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             paramsMap[key.trim()] = value.trim()
         }
 
-        if (nestedLines.isNotEmpty()) {
+        if (nestedLines.isNotEmpty() && !listMode) {
             paramsMap[currentKey] = nestedLines.parseToMap()
             currentKey = ""
             nestedLines.clear()
-            listMode = false
         }
 
         if (nestedLists.isNotEmpty()) {
