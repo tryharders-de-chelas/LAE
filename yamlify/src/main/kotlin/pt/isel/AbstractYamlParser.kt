@@ -25,28 +25,31 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
     private fun countLeadingSpaces(input: String): Int =
         input.takeWhile { it.isWhitespace() }.length
 
-    private fun List<String>.isListStart(line: String): Boolean =
+    private fun isListStart(line: String, baseIndent: Int): Boolean =
         line.startsWith(
-            " ".repeat(countLeadingSpaces(this.first())) + " ".repeat(2) + "-"
+            " ".repeat(baseIndent) + " ".repeat(2) + "-"
         )
 
 
     private fun List<String>.parseToMap(): Map<String, Any> {
         val paramsMap = mutableMapOf<String, Any>()
         var currentKey = ""
-        val nestedLines = mutableListOf<String>()
-        val nestedLists = mutableListOf<Map<String, Any>>()
+        var nestedLines = mutableListOf<String>()
+        var nestedLists = mutableListOf<Map<String, Any>>()
         var listMode = false
+        val baseIndent = countLeadingSpaces(this.first())
+        var currentIndent: Int
 
         for (line in this) {
+            currentIndent = countLeadingSpaces(line)
             if (line.isBlank())
                 continue
 
             if (listMode) {
-                if (countLeadingSpaces(line) > countLeadingSpaces(this.first())) {
-                    if (isListStart(line)) {
+                if (currentIndent > baseIndent) {
+                    if (isListStart(line, baseIndent)) {
                         nestedLists.add(nestedLines.parseToMap())
-                        nestedLines.clear()
+                        nestedLines = mutableListOf()
                     } else {
                         nestedLines.add(line)
                     }
@@ -54,20 +57,19 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 } else {
                     paramsMap[currentKey] = nestedLists
                     currentKey = ""
-                    nestedLines.clear()
+                    nestedLines = mutableListOf()
                     listMode = false
                 }
             }
 
-            if (isListStart(line)) {
+            if (isListStart(line, baseIndent)) {
                 listMode = true
                 continue
             }
 
-            val (key, value) = line.split(":")
 
 
-            if (countLeadingSpaces(line) > countLeadingSpaces(this.first()) && currentKey.isNotBlank()) {
+            if (currentIndent > baseIndent && currentKey.isNotBlank()) {
                 nestedLines.add(line)
                 continue
             }
@@ -75,15 +77,16 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             if (nestedLines.isNotEmpty()) {
                 paramsMap[currentKey] = nestedLines.parseToMap()
                 currentKey = ""
-                nestedLines.clear()
+                nestedLines = mutableListOf()
                 listMode = false
             }
 
+            val (key, value) = line.split(":").map { it.trim() }
             if (value.isBlank()) {
-                currentKey = key.trim()
+                currentKey = key
             }
 
-            paramsMap[key.trim()] = value.trim()
+            paramsMap[key] = value
         }
 
         if (nestedLines.isNotEmpty() && !listMode) {
@@ -91,7 +94,8 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         }
 
         if (nestedLists.isNotEmpty()) {
-            if (nestedLines.isNotEmpty()) nestedLists.add(nestedLines.parseToMap())
+            if (nestedLines.isNotEmpty())
+                nestedLists.add(nestedLines.parseToMap())
             paramsMap[currentKey] = nestedLists
         }
 
@@ -102,16 +106,17 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
 
     final override fun parseObject(yaml: Reader): T {
         val args = yaml.readText().trimIndent().lines()
-        val x= args.parseToMap()
-        return newInstance(args.parseToMap())
+        val parsedArgs = args.parseToMap()
+        return newInstance(parsedArgs)
     }
 
 
     final override fun parseList(yaml: Reader): List<T> {
         val resultList = mutableListOf<T>()
         if(isStringType() || isPrimitiveType()){
-            val objects = yaml.readText().split("-").filter { it.isNotBlank() }
-            for (obj in objects){
+            for (obj in yaml.readText().split("-")){
+                if(obj.isBlank())
+                    continue
                 resultList.add(convertType(obj.trim(), type) as T)
             }
         } else {

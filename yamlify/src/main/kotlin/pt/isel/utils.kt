@@ -15,7 +15,6 @@ fun convertType(value: String, targetType: KClass<*>): Any? {
         Float::class -> value.toFloatOrNull()
         Double::class -> value.toDoubleOrNull()
         String::class -> value
-
         else -> null //invalid type
     } as Any
 }
