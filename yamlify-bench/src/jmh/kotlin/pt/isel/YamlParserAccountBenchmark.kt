@@ -19,5 +19,6 @@ open class YamlParserAccountBenchmark  {
     fun accountReflect(): SavingsAccount {
         return parserStudentReflect.parseObject(yamlSavingsAccount.reader())
     }
+
 }
 

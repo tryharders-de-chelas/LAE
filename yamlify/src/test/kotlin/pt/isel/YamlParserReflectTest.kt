@@ -1,12 +1,15 @@
 package pt.isel
 
 import org.junit.jupiter.api.assertThrows
+import pt.isel.test.Books
 import pt.isel.test.Classroom
 import pt.isel.test.School
 import pt.isel.test.Student
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class YamlParserReflectTest {
 
@@ -32,11 +35,12 @@ class YamlParserReflectTest {
         val yaml = """
                 name: Maria Candida
                 nr: 873435
+                from: Oleiros
                 address:
                   street: Rua Rosa
                   nr: 78
                   city: Lisbon
-                from: Oleiros"""
+                """
         val st = YamlParserReflect.yamlParser(Student::class).parseObject(yaml.reader())
         assertEquals("Maria Candida", st.name)
         assertEquals(873435, st.nr)
@@ -155,6 +159,47 @@ class YamlParserReflectTest {
     }
 
     @Test
+    fun parseStudentWithGrades(){
+        val yaml = """
+                  name: Maria Candida
+                  nr: 873435
+                  from: Oleiros
+                  address:
+                    street: Rua Rosa
+                    nr: 78
+                    city: Lisbon
+                  grades:
+                    - 
+                      subject: LAE
+                      classification: 18
+                    -
+                      subject: PDM
+                      classification: 15
+                    -
+                      subject: PC
+                      classification: 19
+                """.trimIndent()
+        val st = YamlParserReflect.yamlParser(Student::class).parseObject(yaml.reader())
+        assertEquals("Maria Candida", st.name)
+        assertEquals(873435, st.nr)
+        assertEquals("Oleiros", st.from)
+        assertEquals("Rua Rosa", st.address?.street)
+        assertEquals(78, st.address?.nr)
+        assertEquals("Lisbon", st.address?.city)
+        val grades = st.grades.iterator()
+        val g1 = grades.next()
+        assertEquals("LAE", g1.subject)
+        assertEquals(18, g1.classification)
+        val g2 = grades.next()
+        assertEquals("PDM", g2.subject)
+        assertEquals(15, g2.classification)
+        val g3 = grades.next()
+        assertEquals("PC", g3.subject)
+        assertEquals(19, g3.classification)
+        assertFalse { grades.hasNext() }
+    }
+
+    @Test
     fun parseSchool(){
         val yaml = """
             id: 2543
@@ -212,6 +257,18 @@ class YamlParserReflectTest {
         assertEquals(1911, s2.founded)
     }
 
+    @Test
+    fun ParseYamlConvert(){
+        val yaml = """
+            name: Dragao
+            date: 2004-02-02
+                """.trimIndent()
+        val schools = YamlParserReflect.yamlParser(Books::class).parseObject(yaml.reader())
+        assertEquals( schools.name , "Dragao" )
+        assertEquals(  schools.date,LocalDate.of(2004, 2, 2) )
+
+    }
+
 
     private fun assertStudentsInSequence(seq: Iterator<Student>) {
         val st1 = seq.next()
@@ -249,6 +306,11 @@ class YamlParserReflectTest {
         assertFalse { grades2.hasNext() }
         assertFalse { seq.hasNext() }
     }
+
+
+
+
+
 }
 
 const val yamlSequenceOfStudents = """
