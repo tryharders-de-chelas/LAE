@@ -30,119 +30,100 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             " ".repeat(baseIndent) + " ".repeat(2) + "-"
         )
 
+    private fun getLine(iter: ListIterator<String>, delimiter: String): Pair<String, String> {
+        var key: String
+        var value: String
+        iter.next().split(delimiter, limit = 2).also {
+            if(it.size == 1){
+                key = it[0]
+                value = ""
+            } else {
+                key = it[0]
+                value = it[1]
+            }
+        }
+        return key to value
+    }
 
-    private fun primitiveList(iter: Iterator<String>,firstLine:String): List<Any> {
+    private fun primitiveList(iter: ListIterator<String>,firstLine:String): List<Any> {
         val mutableList:MutableList<Any> = mutableListOf()
         val baseIndent: Int = countLeadingSpaces(firstLine)
-        var key= firstLine
+        var value= firstLine
         while(iter.hasNext()){
-            mutableList.add(key)
-            key = iter.next().split("-")[1]
-            if(baseIndent != countLeadingSpaces(key)) break
+            mutableList.add(value)
+            value = getLine(iter, "-").second
+            if(baseIndent != countLeadingSpaces(value)) break
         }
         return mutableList
     }
     private fun objectList(iter: ListIterator<String>, baseIndent: Int): List<Any> {
         val mutableList:MutableList<Any> = mutableListOf()
-        var (key, value) = iter.next().split(":")
-        //val baseIndent: Int = countLeadingSpaces(key)
-        val currentMap = mutableMapOf<String,Any>()
-        while(iter.hasNext()){
+        var (key, value) = getLine(iter, ":")
+        while(true){
             val trimmedKey = key.trim()
-            when {
-                trimmedKey == "-" -> {
-                    if(currentMap.isNotEmpty()){
-                    mutableList.add(currentMap)
-                    currentMap.clear()
-                    }
-                }
-                key.isNotBlank() && value.isNotBlank() -> currentMap[key] = value.trim()
-                else -> mutableList.add(parseToMap(iter))
+            if (trimmedKey == "-") {
+                mutableList.add(parseToMap(iter))
             }
 
             if(!iter.hasNext()) {
-                if (currentMap.isNotEmpty())
-                    mutableList.add(currentMap)
                 break
             }
 
-            iter.next().split(":").also {
-                if(it.size == 1){
-                    key = it[0]
-                    value = ""
-                } else {
-                    key = it[0]
-                    value = it[1]
-                }
+            getLine(iter, ":").also {
+                key = it.first
+                value = it.second
             }
-            if(baseIndent < countLeadingSpaces(key)){
-                if (currentMap.isNotEmpty())
-                    mutableList.add(currentMap)
+            if(baseIndent >= countLeadingSpaces(key)){
+                iter.previous()
                 break
             }
         }
         return mutableList.toList()
     }
 
-
-    private fun isList(iter:ListIterator<String>,value:String, baseIndent: Int):List<Any> =
-        if(value.isBlank())
-            objectList(iter, baseIndent)
-        else
-            primitiveList(iter,value)
-
-    private fun objectOrList(iter:ListIterator<String>,baseIndent: Int){
-        val value = iter.next()
-        if(value.contains(":"))parseToMap(iter)
-        else isList(iter,value.split("-")[1],baseIndent)
+    private fun convert(){
 
     }
 
 
-    private fun parseToMap(iter: ListIterator<String>, nestedMapKey: String? = null): Map<String, Any> {
+    private fun parseToMap(iter: ListIterator<String>,  defaultIndent: Int? = null): Map<String, Any> {
         val paramsMap = mutableMapOf<String, Any>()
-        var key : String
-        var value : String
-            iter.next().split(":").also {
-                if(it.size == 1){
-                    key = it[0]
-                    value = ""
-                } else {
-                key = it[0]
-                value = it[1]
-                }
-            }
-        val baseIndent: Int = countLeadingSpaces(key)
+        var (key, value) = getLine(iter, ":")
+
+        val baseIndent: Int = defaultIndent ?: countLeadingSpaces(key)
         while (true){
             val trimmedKey = key.trim()
             when {
-                trimmedKey == "-" -> {
-                    paramsMap[nestedMapKey ?: trimmedKey] = isList(iter, value.trim(), countLeadingSpaces(key))
+                value.isBlank() -> {
+                    val nextValue = getLine(iter, ":").second
+                    iter.previous()
+                    if(nextValue.isBlank())
+                        paramsMap[trimmedKey] = objectList(iter, countLeadingSpaces(key))
+                    else
+                        paramsMap[trimmedKey] = parseToMap(iter)
                 }
-                value.isBlank() -> paramsMap[trimmedKey] =parseToMap(iter, trimmedKey) //objectOrList(iter,baseIndent)//
                 else -> paramsMap[trimmedKey] = value.trim()
             }
 
             if (iter.hasNext())
-                iter.next().split(":").also {
-                    key = it[0]
-                    value = it[1]
+                getLine(iter, ":").also {
+                    key = it.first
+                    value = it.second
                 }
             else
-                break
-            if(baseIndent != countLeadingSpaces(key)){
+                return paramsMap
+            if(baseIndent > countLeadingSpaces(key)){
                 iter.previous()
-                break
+                return paramsMap
             }
         }
-        return paramsMap
     }
 
     private fun List<String>.parseToMap2(): Map<String, Any> {
         val paramsMap = mutableMapOf<String, Any>()
         var currentKey = ""
         var nestedLines = mutableListOf<String>()
-        var nestedLists = mutableListOf<Map<String, Any>>()
+        val nestedLists = mutableListOf<Map<String, Any>>()
         var listMode = false
         val baseIndent = countLeadingSpaces(this.first())
         var currentIndent: Int
