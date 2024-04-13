@@ -1,16 +1,20 @@
 package pt.isel
 
 import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
 import kotlin.reflect.KParameter
-import kotlin.reflect.KProperty
 import kotlin.reflect.full.*
+import kotlin.reflect.jvm.javaType
 import kotlin.reflect.jvm.jvmErasure
 
 /**
  * A YamlParser that uses reflection to parse objects.
  */
 class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : AbstractYamlParser<T>(type) {
+
+    init {
+
+    }
+
     companion object {
         /**
          *Internal cache of YamlParserReflect instances.
@@ -26,84 +30,109 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
             return yamlParsers.getOrPut(type) { YamlParserReflect(type) } as YamlParserReflect<T>
         }
 
-        private val yamlParserConstructors = mutableMapOf<KClass<*>, KFunction<*>>()
-
-        fun <T : Any> yamlParserConstructor(type: KClass<T>): KFunction<T> {
-            return yamlParserConstructors.getOrPut(type) {
-                type.constructors.first()
-            } as KFunction<T>
-        }
-
-        private val yamlParserMemberProps = mutableMapOf<KClass<*>, Collection<KProperty<*>>>()
-
-        fun <T : Any> yamlParserMemberProps(type: KClass<T>): Collection<KProperty<*>> {
-            return yamlParserMemberProps.getOrPut(type) {
-                type.memberProperties
-            }
-        }
     }
-        /**
-         * Used to get a parser for other Type using the same parsing approach.
-         */
-        override fun <T : Any> yamlParser(type: KClass<T>) = YamlParserReflect.yamlParser(type)
-        /**
-         * Creates a new instance of T through the first constructor
-         * that has all the mandatory parameters in the map and optional parameters for the rest.
-         */
+    /**
+     * Used to get a parser for other Type using the same parsing approach.
+     */
+    override fun <T : Any> yamlParser(type: KClass<T>) = YamlParserReflect.yamlParser(type)
 
-    private val constructor = yamlParserConstructor(type)
-    private val memberProps = yamlParserMemberProps(type)
-    private val yamlArgAnnotations: Map<String, YamlArg?> =
-        memberProps.associate { it.name to it.findAnnotation<YamlArg>() }
-    private val yamlConvertAnnotations: Map<String, YamlConvert?> =
-        memberProps.associate { it.name to it.findAnnotation<YamlConvert>() }
-    private val ctorParamsMap = mutableMapOf<KParameter, Any?>()
 
+    /**
+     * Creates a new instance of T through the first constructor
+     * that has all the mandatory parameters in the map and optional parameters for the rest.
+     */
     override fun newInstance(args: Map<String, Any>): T {
-        for (param in constructor.parameters){
-            val paramName = param.name ?:continue
-            val y = yamlArgAnnotations[paramName]?.paramName
-            if(!args.containsKey(paramName) && !args.containsKey(y))
+        require(
+            argKParameterName.none { (key, value) -> !key.isOptional && !args.containsKey(value) }
+        ) { "Map must not be empty" }
+        val ctorArgs = mutableMapOf<KParameter, Any>()
+        for ((kParameter, name) in argKParameterName){
+            if(kParameter.isOptional && !args.containsKey(name))
                 continue
-           // val paramAnnotationValue = yamlArgAnnotations[paramName]?.paramName
-            val paramValue = args[paramName] ?: args[y]!!
-            val converter = yamlConvertAnnotations[paramName]
-            val paramType = param.type.jvmErasure
-
-            ctorParamsMap[param] = when{
-                converter!=null -> {
-                    val newClassRef = converter.newClass
-                    newClassRef.declaredFunctions.first().call(
-                        newClassRef.primaryConstructor!!.callBy(emptyMap()),
-                        paramValue
-                    )
+            val typeClass = argTypeMap[kParameter.name!!]!!
+            val paramValue = args[name]
+            when{
+                (yamlConvertMap.containsKey(kParameter)) -> {
+                    ctorArgs[kParameter] = yamlConvertMap[kParameter]!!
+                        .declaredFunctions
+                        .first()
+                        .call(
+                            yamlConvertMap[kParameter]!!.primaryConstructor!!.callBy(emptyMap()),
+                            paramValue
+                        ) as Any
                 }
-                paramType == Sequence::class -> {
-                    createParserAndInstanceForCollection(param.type.arguments.first().type!!.jvmErasure, paramValue).asSequence()
+                paramValue is Map<*, *> -> {
+                    yamlParser(typeClass).newInstance(paramValue as Map<String, Any>).let { obj ->
+                        ctorArgs[kParameter] = obj
+                    }
                 }
-                paramType == List::class -> {
-                    createParserAndInstanceForCollection(param.type.arguments.first().type!!.jvmErasure, paramValue)
-                }
-                paramType == String::class || paramType.javaPrimitiveType != null -> {
-                    convertType((paramValue as String), paramType)
+                paramValue is List<*> -> {
+                    if(kParameter.type.jvmErasure == List::class){
+                        val parser = yamlParser(kParameter.type.arguments[0].type!!.jvmErasure)
+                        ctorArgs[kParameter] = (paramValue).map { parser.newInstance(it as Map<String, Any>) }
+                    } else { // is Sequence<*>
+                        val parser = yamlParser(kParameter.type.arguments[0].type!!.jvmErasure)
+                        ctorArgs[kParameter] =
+                            (paramValue as Iterable<Map<String, Any>>)
+                                .map { parser.newInstance(it) }
+                                .asSequence()
+                    }
                 }
                 else -> {
-                    createParserAndInstance(paramType, paramValue)
+                    convert(paramValue as String, typeClass)?.let {
+                        ctorArgs[kParameter] = it
+                    }
                 }
             }
         }
-
-        return constructor.callBy(ctorParamsMap)
+        return ctor.callBy(ctorArgs)
     }
 
+    private val ctor = type.primaryConstructor!!
 
-    private fun createParserAndInstance(paramType: KClass<*>, args: Any) =
-        yamlParser(paramType).newInstance(args as Map<String, Any>)
-
-    private fun createParserAndInstanceForCollection(paramType: KClass<*>, args: Any) =
-        (args as Iterable<Map<String, Any>>).map {
-            yamlParser(paramType).newInstance(it)
+    private val argTypeMap = run {
+        val map = mutableMapOf<String, KClass<*>>()
+        ctor.parameters.forEach {
+            map[it.name!!] = it.type.jvmErasure
         }
+        map.toMap()
+    }
+
+    private val argKParameterName = run {
+        val map = mutableMapOf<KParameter, String>()
+        ctor.parameters.forEach {
+            map[it] = it.findAnnotation<YamlArg>()?.paramName ?: it.name!!
+        }
+        map.toMap()
+    }
+
+    private val yamlConvertMap = run {
+        val map = mutableMapOf<KParameter, KClass<*>>()
+        ctor.parameters.forEach {
+            it.findAnnotation<YamlConvert>()?.let { yamlConvert ->
+                map[it] = yamlConvert.newClass
+            }
+        }
+        map.toMap()
+    }
+
+    //private val conversionMap = mutableMapOf<KClass<*>, (KParameter, V)>()
+
+
+    private fun convert(value: String, type: KClass<*>): Any? =
+         when(type) {
+            String::class -> value
+            Boolean::class -> value.toBooleanStrictOrNull()
+            Char::class -> value.firstOrNull()
+            Short::class -> value.toShortOrNull()
+            Int::class -> value.toIntOrNull()
+            Long::class -> value.toLongOrNull()
+            Float::class -> value.toFloatOrNull()
+            Double::class -> value.toDoubleOrNull()
+            else -> null
+        }
+
+
 
 
 }
