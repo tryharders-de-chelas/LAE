@@ -22,32 +22,26 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
 
     init {
         for (param in ctor.parameters) {
-            val type=param.type.jvmErasure
-            argTypeMap[param.name!!] = type
+            val paramType = param.type.jvmErasure
+            argTypeMap[param.name!!] = paramType
             argKParameterName[param] = param.findAnnotation<YamlArg>()?.paramName ?: param.name!!
             param.findAnnotation<YamlConvert>()?.newClass?.also {
                 yamlConvertMap[param] = it
             }
-            val valueType = if(
-                type.javaPrimitiveType == null &&
-                type != String::class &&
-                type != List::class &&
-                type != Sequence::class &&
-                !yamlConvertMap.containsKey(param)
-                ) Map::class.starProjectedType.jvmErasure else type
-            conversionMap[type] = convert(param, valueType)
+            conversionMap[paramType] = primitiveMap[paramType] ?: when (paramType) {
+                List::class -> convertList(param)
+                Sequence::class -> convertSequence(param)
+                else -> {
+                    val valueType =
+                        if(yamlConvertMap[param] == null)
+                            Map::class.starProjectedType.jvmErasure
+                        else
+                            paramType
+                    convertRefTypes(valueType)
+                }
+            }
         }
     }
-
-/*
-    ctor.parameters.forEach {
-        it.findAnnotation<YamlConvert>()?.let { yamlConvert ->
-            map[it] = yamlConvert.newClass
-        }
-    }
-    map.toMap()
-
- */
 
     companion object {
         /**
@@ -64,6 +58,18 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
             @Suppress("UNCHECKED_CAST")
             return yamlParsers.getOrPut(type) { YamlParserReflect(type) } as YamlParserReflect<T>
         }
+
+        val primitiveMap: Map<KClass<*>, (KParameter, Any) -> Any> =
+            mapOf(
+                Boolean::class to { _, v: Any -> (v as String).toBoolean() },
+                Char::class to { _, v: Any -> (v as String).first() },
+                Short::class to { _, v: Any -> (v as String).toShort() },
+                Int::class to { _, v: Any -> (v as String).toInt() },
+                Long::class to { _, v: Any -> (v as String).toLong() },
+                Float::class to { _, v: Any -> (v as String).toFloat() },
+                Double::class to { _, v: Any -> (v as String).toDouble() },
+                String::class to { _, v: Any -> v as String }
+            )
 
     }
     /**
@@ -85,72 +91,46 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
             if(kParameter.isOptional && !args.containsKey(name))
                 continue
             val typeClass = argTypeMap[kParameter.name!!]!!
-            val paramValue = args[name]!!
-            ctorArgs[kParameter] = conversionMap[typeClass]!!(kParameter, paramValue)
+            ctorArgs[kParameter] =
+                primitiveMap[typeClass]?.invoke(kParameter, args[name]!!) ?:
+                conversionMap[typeClass]!!(kParameter, args[name]!!)
         }
         return ctor.callBy(ctorArgs)
     }
 
+    private fun convertList(param: KParameter): (KParameter, Any) -> Any {
+        val parser = yamlParser(param.type.arguments[0].type!!.jvmErasure)
+        return { _, v: Any ->
+            @Suppress("UNCHECKED_CAST")
+            (v as List<Map<String, Any>>).map { parser.newInstance(it) }
+        }
+    }
 
+    private fun convertSequence(param: KParameter): (KParameter, Any) -> Any {
+        val parser = yamlParser(param.type.arguments[0].type!!.jvmErasure)
+        return { _, v: Any ->
+            @Suppress("UNCHECKED_CAST")
+            (v as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
+        }
+    }
 
-    private fun convert(param: KParameter, value: Any): (KParameter, Any) -> Any{
-        when {
-            (param.type.jvmErasure.javaPrimitiveType != null || param.type.jvmErasure == String::class) ->
-                when (param.type.jvmErasure) {
-                    Boolean::class -> return { _, v: Any ->
-                        (v as String).toBoolean()
-                    }
-                    Char::class -> return{ _, v:Any ->
-                        (v as String).first()
-                    }
-                    Short::class -> return{ _, v:Any ->
-                        (v as String).toShort()
-                    }
-                    Int::class ->  return{ _, v:Any ->
-                        (v as String).toInt()
-                    }
-                    Long::class -> return{ _, v:Any ->
-                        (v as String).toLong()
-                    }
-                    Float::class -> return { _, v: Any ->
-                        (v as String).toFloat()
-                    }
-                    Double::class -> return { _, v: Any ->
-                        (v as String).toDouble()
-                    }
-
-                    else -> return { _, v: Any ->
-                        v as String
-                    }
-                }
-            param.type.jvmErasure == List::class -> return { p: KParameter, v: Any ->
-                    val parser = yamlParser(p.type.arguments[0].type!!.jvmErasure)
-                    @Suppress("UNCHECKED_CAST")
-                    (v as List<Map<String, Any>>).map { parser.newInstance(it) }
+    private fun convertRefTypes(value: Any): (KParameter, Any) -> Any {
+        // Nested Objects
+        if(value == Map::class) return { p: KParameter, v: Any ->
+            @Suppress("UNCHECKED_CAST")
+            yamlParser(p.type.jvmErasure).newInstance(v as Map<String, Any>)
+        } else return ret@ { p: KParameter, v: Any ->
+            if(yamlConvertMap.containsKey(p)){
+                return@ret yamlConvertMap[p]!!
+                .declaredFunctions
+                .first()
+                .call(
+                    yamlConvertMap[p]!!.primaryConstructor!!.callBy(emptyMap()),
+                    v
+                ) as Any
+            } else {
+                return@ret v
             }
-            (param.type.jvmErasure == Sequence::class) -> return { p: KParameter, v: Any ->
-                    val parser = yamlParser(p.type.arguments[0].type!!.jvmErasure)
-                    @Suppress("UNCHECKED_CAST")
-                    (v as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
-            }
-            else ->
-                if(value == Map::class) return { p: KParameter, v: Any ->
-                @Suppress("UNCHECKED_CAST")
-                yamlParser(p.type.jvmErasure).newInstance(v as Map<String, Any>)
-                }//12
-                else return ret@ { p: KParameter, v: Any ->
-                    if(yamlConvertMap.containsKey(p)){
-                        return@ret yamlConvertMap[p]!!
-                        .declaredFunctions
-                        .first()
-                        .call(
-                            yamlConvertMap[p]!!.primaryConstructor!!.callBy(emptyMap()),
-                            v
-                        ) as Any
-                    } else {
-                        return@ret v
-                    }
-                }
         }
     }
 }
