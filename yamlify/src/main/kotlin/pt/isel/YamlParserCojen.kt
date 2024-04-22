@@ -2,10 +2,11 @@ package pt.isel
 
 import org.cojen.maker.ClassMaker
 import kotlin.reflect.KClass
+
 /**
  * A YamlParser that uses Cojen Maker to generate a parser.
  */
-open class YamlParserCojen<T : Any>(
+open class YamlParserCojen<T : Any> (
     private val type: KClass<T>,
     private val nrOfInitArgs: Int)
 : AbstractYamlParser<T>(type) {
@@ -35,6 +36,10 @@ open class YamlParserCojen<T : Any>(
      */
     override fun <T : Any> yamlParser(type: KClass<T>) = YamlParserCojen.yamlParser(type)
 
+    fun <T : Any> yamlParser(type: Class<T>): AbstractYamlParser<T>{
+        return yamlParser(type.kotlin)
+    }
+
     /**
      * Do not change this method in YamlParserCojen.
      */
@@ -48,9 +53,11 @@ open class YamlParserCojen<T : Any>(
             .public_()
             .extend(YamlParserCojen::class.java)
             .apply {
-                addConstructor(KClass::class.java, Integer::class.java).public_().also { ctor ->
-                    ctor.invokeSuperConstructor(ctor.param(0), ctor.param(1))
-                }
+                addConstructor(KClass::class.java, Integer::class.java)
+                    .public_()
+                    .also { ctor ->
+                        ctor.invokeSuperConstructor(ctor.param(0), ctor.param(1))
+                    }
                 addParseMethod(type)
             }
 
@@ -58,7 +65,6 @@ open class YamlParserCojen<T : Any>(
 
     private fun ClassMaker.addParseMethod(destType: KClass<T>) {
         // get the right constructor
-        // TODO: make it work for cases where there are multiple constructors with the same number of arguments
         val destInit = type
             .java
             .constructors.first {
@@ -72,7 +78,7 @@ open class YamlParserCojen<T : Any>(
         addMethod(Any::class.java, "newInstance", Map::class.java)
             .public_()
             .apply {
-                val argMap = param(0).cast(Map::class.java)
+                val argMap = param(0)
                 val argValues = args.map { (k, v) ->
                     when {
                         v == String::class.java || v.isPrimitive ->
@@ -80,12 +86,12 @@ open class YamlParserCojen<T : Any>(
                         v == List::class.java -> TODO("Not implemented yet")
                         v == Sequence::class.java -> TODO("Not implemented yet")
                         else ->
-                            YamlParserCojen.yamlParser(v.kotlin)::class.java
-                                .getDeclaredMethod("newInstance", Map::class.java)
-                                .invoke(YamlParserCojen.yamlParser(v.kotlin), argMap.invoke("get", k).cast(Map::class.java))
+                            super_()
+                                .invoke("yamlParser", v)
+                                .invoke("newInstance", argMap.invoke("get", k).cast(Map::class.java))
+                                .cast(v)
                     }
                 }
-
 
                 val cls = this.new_(destType.java, *argValues.toTypedArray())
                 this.return_(cls)
