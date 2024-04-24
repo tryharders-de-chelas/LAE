@@ -121,24 +121,17 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             }
         } else {
             val nestedLines = mutableListOf<String>()
-            val objects = yaml.readText().trimIndent().lines()
-            for(line in objects){
+            for(line in yaml.readText().trimIndent().lines()){
                 if(line.startsWith("-")){
                     if(nestedLines.isNotEmpty()){
-                        val obj = newInstance(nestedLines.parseToMap())
-                        resultList.add(obj)
+                        resultList.add(newInstance(nestedLines.parseToMap()))
                         nestedLines.clear()
                     }
-                    continue
-                }
-
-                nestedLines.add(line)
+                }else nestedLines.add(line)
             }
 
             if(nestedLines.isNotEmpty()){
-                val obj = newInstance(nestedLines.parseToMap())
-                resultList.add(obj)
-                nestedLines.clear()
+                resultList.add(newInstance(nestedLines.parseToMap()))
             }
 
         }

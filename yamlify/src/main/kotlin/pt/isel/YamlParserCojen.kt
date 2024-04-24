@@ -2,6 +2,8 @@ package pt.isel
 
 import org.cojen.maker.ClassMaker
 import kotlin.reflect.KClass
+import kotlin.reflect.jvm.jvmErasure
+import kotlin.reflect.jvm.kotlinFunction
 
 /**
  * A YamlParser that uses Cojen Maker to generate a parser.
@@ -67,34 +69,59 @@ open class YamlParserCojen<T : Any> (
         // get the right constructor
         val destInit = type
             .java
-            .constructors.first {
+            .constructors.find {
                 it.parameters.size == nrOfInitArgs
             }
 
+        //val kctor = type.constructors.first().parameters.filter { it.name in destInit?.parameters.map { it.name } }
+
         // get the type of each parameter
-        val args = destInit.parameters.associate { it.name to it.type }
+        val args = destInit?.kotlinFunction?.parameters?.associate { it.name to it.type }
 
         // add the parse method
         addMethod(Any::class.java, "newInstance", Map::class.java)
             .public_()
             .apply {
                 val argMap = param(0)
-                val argValues = args.map { (k, v) ->
-                    when {
-                        v == String::class.java || v.isPrimitive ->
-                            `var`(v).invoke("valueOf", argMap.invoke("get", k).cast(String::class.java))
-                        v == List::class.java -> TODO("Not implemented yet")
-                        v == Sequence::class.java -> TODO("Not implemented yet")
-                        else ->
-                            super_()
-                                .invoke("yamlParser", v)
-                                .invoke("newInstance", argMap.invoke("get", k).cast(Map::class.java))
-                                .cast(v)
-                    }
-                }
 
-                val cls = this.new_(destType.java, *argValues.toTypedArray())
-                this.return_(cls)
+                if(destInit == null){
+                    // It's either a primitive or a String
+                    val arg = param(0)
+                        .invoke("keySet").cast(Set::class.java)
+                        .invoke("iterator").invoke("next").cast(String::class.java)
+                    val value = `var`(destType.java).invoke("valueOf", arg)
+                    return_(value)
+                } else {
+                    // It's a reference type
+                    val argValues = args?.map { (k, v) ->
+                        val cls = v.jvmErasure.java
+                        when {
+                            cls == String::class.java -> argMap.invoke("get", k).cast(String::class.java)
+                            cls.isPrimitive ->
+                                `var`(cls).invoke("valueOf", argMap.invoke("get", k).cast(String::class.java))
+                            cls == List::class.java -> TODO("Not implemented yet")
+                            cls == Sequence::class.java -> {
+                                val argSeq = argMap.invoke("get", k).cast(v)
+                                val elemType = v.arguments[0].type?.jvmErasure
+                                val retList = new_(v) // TODO: Find out how to create a sequence
+                                val parser = super_().invoke("yamlParser", v)
+
+                                val startLabel = label()
+                                val endLabel = label()
+
+                            }
+                            else ->
+                                super_()
+                                    .invoke("yamlParser", cls)
+                                    .invoke("newInstance", argMap.invoke("get", k).cast(Map::class.java))
+                                    .cast(cls)
+                        }
+                    }
+
+                    val cls = this.new_(destType.java, *argValues!!.toTypedArray())
+                    this.return_(cls)
+
+                }
             }
     }
 }
