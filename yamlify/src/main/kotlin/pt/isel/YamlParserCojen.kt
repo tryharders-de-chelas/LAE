@@ -118,28 +118,6 @@ open class YamlParserCojen<T : Any> (
                                 endLabel.here()
                                 return@map retList
                             }
-                            v == Sequence::class.java -> {
-                                val argSeq = argMap.invoke("get", k).cast(v)
-                                val elemType =
-                                    (destInit.parameters.first{ it.name == k }.parameterizedType as ParameterizedType)
-                                        .actualTypeArguments[0] as Class<*>
-                                val parser = super_().invoke("yamlParser", elemType)
-                                val argSeqSize = argSeq.invoke("size").cast(Int::class.java) // argSeq.size()
-                                val i = `var`(Int::class.java).set(0) // i = 0
-                                val retList = new_(ArrayList::class.java, argSeqSize)
-                                // TODO: Find out how to create a sequence
-                                val endLabel = label()
-                                val startLabel = label().here()
-                                i.ifGe(argSeqSize, endLabel) // i >= argSeq.size()
-                                val elemMap =
-                                    argSeq.invoke("get", i.cast(Int::class.java)).cast(Map::class.java)
-                                val parsedElem = parser.invoke("newInstance", elemMap).cast(elemType)
-                                retList.invoke("add", parsedElem)
-                                i.inc(1) // i++
-                                goto_(startLabel)
-                                endLabel.here()
-                                return@map retList
-                            }
                             else ->
                                 super_()
                                     .invoke("yamlParser", v)
