@@ -14,8 +14,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
      */
     abstract fun newInstance(args: Map<String, Any>): T
 
-    private fun countLeadingSpaces(input: String): Int =
-        input.takeWhile { it.isWhitespace() }.length
+    private fun countLeadingSpaces(input: String): Int = input.takeWhile { it.isWhitespace() }.length
 
     private fun getLine(iter: ListIterator<String>, delimiter: String): Pair<String, String> {
         var key: String
@@ -43,6 +42,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         }
         return mutableList
     }
+
     private fun objectList(iter: ListIterator<String>, baseIndent: Int): List<Any> {
         val mutableList:MutableList<Any> = mutableListOf()
         var (key, value) = getLine(iter, ":")
@@ -127,7 +127,7 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 @Suppress("UNCHECKED_CAST")
                 l += objectList(iter, countLeadingSpaces(key)).map { newInstance(it as Map<String, Any>) }
             }
-            return l
+            l
         } else {
             @Suppress("UNCHECKED_CAST")
             primitiveList(iter, value).map { primitiveMap[type]!!((it as String).trim()) as T}

@@ -1,6 +1,5 @@
 package pt.isel
 
-import java.io.FileOutputStream
 import java.lang.reflect.ParameterizedType
 import org.cojen.maker.ClassMaker
 import kotlin.reflect.KClass
@@ -26,9 +25,7 @@ open class YamlParserCojen<T : Any> protected constructor(
         fun <T : Any> yamlParser(type: KClass<T>, nrOfInitArgs: Int = type.constructors.first().parameters.size): AbstractYamlParser<T> {
             return yamlParsers.getOrPut(parserName(type, nrOfInitArgs)) {
                 YamlParserCojen(type, nrOfInitArgs)
-                    .buildYamlParser().also {
-                        it.finishTo(FileOutputStream("${parserName(type, nrOfInitArgs)}.class"))
-                    }
+                    .buildYamlParser()
                     .finish()
                     .getConstructor(KClass::class.java, Integer::class.java)
                     .newInstance(type, nrOfInitArgs) as YamlParserCojen<*>
@@ -62,76 +59,79 @@ open class YamlParserCojen<T : Any> protected constructor(
                     .also { ctor ->
                         ctor.invokeSuperConstructor(ctor.param(0), ctor.param(1))
                     }
-                addParseMethod(type)
+                if(type.javaPrimitiveType == null && type != String::class)
+                    addParseMethod(type)
             }
 
     }
 
     private fun ClassMaker.addParseMethod(destType: KClass<T>) {
+        val javaType = destType.java
         // get the right constructor
-        val destInit = type
-            .java
-            .constructors.find {
+        val destInit = javaType
+            .constructors.first {
                 it.parameters.size == nrOfInitArgs
             }
-
-
-        // get the type of each parameter
-        val args = destInit?.parameters?.associate { it.name to it.type }
 
         // add the parse method
         addMethod(Any::class.java, "newInstance", Map::class.java)
             .public_()
             .apply {
                 val argMap = param(0)
+                val argValues = destInit.parameters.map { param ->
+                    val paramName = param.name
+                    when (val v = param.type) {
+                        String::class.java -> argMap.invoke("get", paramName).cast(String::class.java)
+                        Int::class.java ->
+                            `var`(v).invoke("parseInt", argMap.invoke("get", paramName).cast(String::class.java))
 
-                if(destInit == null){
-                    // type is either a primitive or a String
-                    val arg = argMap
-                        .invoke("keySet").cast(Set::class.java)
-                        .invoke("iterator").invoke("next").cast(String::class.java)
-                    val value = `var`(destType.java).invoke("valueOf", arg)
-                    return_(value)
-                } else {
-                    // It's a reference type
-                    val argValues = args?.map { (k, v) ->
-                        when {
-                            v == String::class.java -> argMap.invoke("get", k).cast(String::class.java)
-                            v.isPrimitive ->
-                                `var`(v).invoke("valueOf", argMap.invoke("get", k).cast(String::class.java))
-                            v == List::class.java -> {
-                                val argSeq = argMap.invoke("get", k).cast(v)
-                                val elemType =
-                                    (destInit.parameters.first{ it.name == k }.parameterizedType as ParameterizedType)
-                                        .actualTypeArguments[0] as Class<*>
-                                val parser = super_().invoke("yamlParser", elemType)
-                                val argSeqSize = argSeq.invoke("size").cast(Int::class.java) // argSeq.size()
-                                val i = `var`(Int::class.java).set(0) // i = 0
-                                val retList = new_(ArrayList::class.java, argSeqSize)
-                                val endLabel = label()
-                                val startLabel = label().here()
-                                i.ifGe(argSeqSize, endLabel) // i >= argSeq.size()
-                                val elemMap =
-                                    argSeq.invoke("get", i.cast(Int::class.java)).cast(Map::class.java)
-                                val parsedElem = parser.invoke("newInstance", elemMap).cast(elemType)
-                                retList.invoke("add", parsedElem)
-                                i.inc(1) // i++
-                                goto_(startLabel)
-                                endLabel.here()
-                                return@map retList
-                            }
-                            else ->
-                                super_()
-                                    .invoke("yamlParser", v)
-                                    .invoke("newInstance", argMap.invoke("get", k).cast(Map::class.java))
-                                    .cast(v)
+                        Short::class.java ->
+                            `var`(v).invoke("parseShort", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        Long::class.java ->
+                            `var`(v).invoke("parseLong", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        Boolean::class.java ->
+                            `var`(v).invoke("parseBoolean", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        Double::class.java ->
+                            `var`(v).invoke("parseDouble", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        Float::class.java ->
+                            `var`(v).invoke("parseFloat", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        Byte::class.java ->
+                            `var`(v).invoke("parseByte", argMap.invoke("get", paramName).cast(String::class.java))
+
+                        List::class.java -> {
+                            val argSeq = argMap.invoke("get", paramName).cast(v)
+                            val elemType =
+                                (destInit.parameters.first{ it.name == paramName }.parameterizedType as ParameterizedType)
+                                    .actualTypeArguments[0] as Class<*>
+                            val parser = super_().invoke("yamlParser", elemType)
+                            val argSeqSize = argSeq.invoke("size").cast(Int::class.java) // argSeq.size()
+                            val i = `var`(Int::class.java).set(0) // i = 0
+                            val retList = new_(ArrayList::class.java, argSeqSize)
+                            val endLabel = label()
+                            val startLabel = label().here()
+                            i.ifGe(argSeqSize, endLabel) // i >= argSeq.size()
+                            val elemMap =
+                                argSeq.invoke("get", i.cast(Int::class.java)).cast(Map::class.java)
+                            val parsedElem = parser.invoke("newInstance", elemMap).cast(elemType)
+                            retList.invoke("add", parsedElem)
+                            i.inc(1) // i++
+                            goto_(startLabel)
+                            endLabel.here()
+                            return@map retList
                         }
+
+                        else -> super_()
+                            .invoke("yamlParser", v)
+                            .invoke("newInstance", argMap.invoke("get", paramName).cast(Map::class.java))
+                            .cast(v)
                     }
-
-                    val cls = this.new_(destType.java, *argValues!!.toTypedArray())
-                    this.return_(cls)
-
                 }
+                this.return_(this.new_(javaType, *argValues.toTypedArray()))
             }
     }
 }
