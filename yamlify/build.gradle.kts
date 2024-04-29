@@ -16,7 +16,7 @@ tasks.compileTestKotlin {
     }
 }
 repositories {
-    // Use Maven Central for resolving dependencies.
+    // Use Maven Central for7 resolving dependencies.
     mavenCentral()
 }
 
