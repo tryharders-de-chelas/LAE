@@ -1,5 +1,6 @@
 package pt.isel
 
+import java.io.FileOutputStream
 import java.lang.reflect.ParameterizedType
 import org.cojen.maker.ClassMaker
 import kotlin.reflect.KClass
@@ -7,7 +8,7 @@ import kotlin.reflect.KClass
 /**
  * A YamlParser that uses Cojen Maker to generate a parser.
  */
-open class YamlParserCojen<T : Any> (
+open class YamlParserCojen<T : Any> protected constructor(
     private val type: KClass<T>,
     private val nrOfInitArgs: Int)
 : AbstractYamlParser<T>(type) {
@@ -25,7 +26,9 @@ open class YamlParserCojen<T : Any> (
         fun <T : Any> yamlParser(type: KClass<T>, nrOfInitArgs: Int = type.constructors.first().parameters.size): AbstractYamlParser<T> {
             return yamlParsers.getOrPut(parserName(type, nrOfInitArgs)) {
                 YamlParserCojen(type, nrOfInitArgs)
-                    .buildYamlParser()
+                    .buildYamlParser().also {
+                        it.finishTo(FileOutputStream("${parserName(type, nrOfInitArgs)}.class"))
+                    }
                     .finish()
                     .getConstructor(KClass::class.java, Integer::class.java)
                     .newInstance(type, nrOfInitArgs) as YamlParserCojen<*>
@@ -72,7 +75,6 @@ open class YamlParserCojen<T : Any> (
                 it.parameters.size == nrOfInitArgs
             }
 
-        //val kctor = type.constructors.first().parameters.filter { it.name in destInit?.parameters.map { it.name } }
 
         // get the type of each parameter
         val args = destInit?.parameters?.associate { it.name to it.type }
@@ -84,8 +86,8 @@ open class YamlParserCojen<T : Any> (
                 val argMap = param(0)
 
                 if(destInit == null){
-                    // It's either a primitive or a String
-                    val arg = param(0)
+                    // type is either a primitive or a String
+                    val arg = argMap
                         .invoke("keySet").cast(Set::class.java)
                         .invoke("iterator").invoke("next").cast(String::class.java)
                     val value = `var`(destType.java).invoke("valueOf", arg)
