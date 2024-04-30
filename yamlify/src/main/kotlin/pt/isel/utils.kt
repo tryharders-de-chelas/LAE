@@ -2,19 +2,14 @@ package pt.isel
 
 import kotlin.reflect.KClass
 
-fun convertType(value: String, targetType: KClass<*>): Any? {
-    if(targetType.isInstance(value))
-        return value
-
-    return when (targetType) {
-        Boolean::class -> value.toBooleanStrictOrNull()
-        Char::class -> value.firstOrNull()
-        Short::class -> value.toShortOrNull()
-        Int::class -> value.toIntOrNull()
-        Long::class -> value.toLongOrNull()
-        Float::class -> value.toFloatOrNull()
-        Double::class -> value.toDoubleOrNull()
-        String::class -> value
-        else -> null //invalid type
-    } as Any
-}
+val primitiveMap: Map<KClass<*>, (Any) -> Any> =
+    mapOf(
+        Boolean::class to { v: Any -> (v as String).toBoolean() },
+        Char::class to { v: Any -> (v as String).first() },
+        Short::class to { v: Any -> (v as String).toShort() },
+        Int::class to { v: Any -> (v as String).toInt() },
+        Long::class to { v: Any -> (v as String).toLong() },
+        Float::class to { v: Any -> (v as String).toFloat() },
+        Double::class to { v: Any -> (v as String).toDouble() },
+        String::class to { v: Any -> (v as String).trim() }
+    )
