@@ -22,6 +22,7 @@ open class YamlParserCojen<T : Any> protected constructor(
          * Creates a YamlParser for the given type using Cojen Maker if it does not already exist.
          * Keep it in an internal cache.
          */
+        @Suppress("UNCHECKED_CAST")
         fun <T : Any> yamlParser(type: KClass<T>, nrOfInitArgs: Int = type.constructors.first().parameters.size): AbstractYamlParser<T> {
             return yamlParsers.getOrPut(parserName(type, nrOfInitArgs)) {
                 YamlParserCojen(type, nrOfInitArgs)
@@ -77,36 +78,35 @@ open class YamlParserCojen<T : Any> protected constructor(
         addMethod(Any::class.java, "newInstance", Map::class.java)
             .public_()
             .apply {
-                val argMap = param(0)
                 val argValues = destInit.parameters.map { param ->
-                    val paramName = param.name
+                    val paramValue = param(0).invoke("get", param.name)
                     when (val v = param.type) {
-                        String::class.java -> argMap.invoke("get", paramName).cast(String::class.java)
+                        String::class.java -> paramValue.cast(String::class.java)
                         Int::class.java ->
-                            `var`(v).invoke("parseInt", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseInt", paramValue.cast(String::class.java))
 
                         Short::class.java ->
-                            `var`(v).invoke("parseShort", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseShort", paramValue.cast(String::class.java))
 
                         Long::class.java ->
-                            `var`(v).invoke("parseLong", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseLong", paramValue.cast(String::class.java))
 
                         Boolean::class.java ->
-                            `var`(v).invoke("parseBoolean", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseBoolean", paramValue.cast(String::class.java))
 
                         Double::class.java ->
-                            `var`(v).invoke("parseDouble", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseDouble", paramValue.cast(String::class.java))
 
                         Float::class.java ->
-                            `var`(v).invoke("parseFloat", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseFloat", paramValue.cast(String::class.java))
 
                         Byte::class.java ->
-                            `var`(v).invoke("parseByte", argMap.invoke("get", paramName).cast(String::class.java))
+                            `var`(v).invoke("parseByte", paramValue.cast(String::class.java))
 
                         List::class.java -> {
-                            val argSeq = argMap.invoke("get", paramName).cast(v)
+                            val argSeq = paramValue.cast(v)
                             val elemType =
-                                (destInit.parameters.first{ it.name == paramName }.parameterizedType as ParameterizedType)
+                                (destInit.parameters.first{ it.name == param.name }.parameterizedType as ParameterizedType)
                                     .actualTypeArguments[0] as Class<*>
                             val parser = super_().invoke("yamlParser", elemType)
                             val argSeqSize = argSeq.invoke("size").cast(Int::class.java) // argSeq.size()
@@ -124,14 +124,13 @@ open class YamlParserCojen<T : Any> protected constructor(
                             endLabel.here()
                             return@map retList
                         }
-
                         else -> super_()
                             .invoke("yamlParser", v)
-                            .invoke("newInstance", argMap.invoke("get", paramName).cast(Map::class.java))
+                            .invoke("newInstance", paramValue.cast(Map::class.java))
                             .cast(v)
                     }
                 }
-                this.return_(this.new_(javaType, *argValues.toTypedArray()))
+                return_(new_(javaType, *argValues.toTypedArray()))
             }
     }
 }
