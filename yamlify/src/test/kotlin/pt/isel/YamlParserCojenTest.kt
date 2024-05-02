@@ -1,6 +1,9 @@
 package pt.isel
 
+import java.time.LocalDate
+import pt.isel.test.Books
 import pt.isel.test.Classroom
+import pt.isel.test.School
 import pt.isel.test.Student
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -186,5 +189,75 @@ class YamlParserCojenTest {
         assertEquals(18, g5.classification)
         assertFalse { grades2.hasNext() }
         assertFalse { seq.hasNext() }
+    }
+
+    @Test
+    fun parseSchool(){
+        val yaml = """
+            id: 2543
+            name: ISEL
+            location:
+                street: Rua Conselheiro Emídio Navarro
+                nr: 1
+                city: Lisbon
+            established: 1852
+        """.trimIndent()
+        val school = YamlParserCojen.yamlParser(School::class).parseObject(yaml.reader())
+        assertEquals(2543, school.id)
+        assertEquals("ISEL", school.name)
+        assertEquals("Rua Conselheiro Emídio Navarro", school.address.street)
+        assertEquals(1, school.address.nr)
+        assertEquals("Lisbon", school.address.city)
+        assertEquals(1852, school.founded)
+    }
+
+    @Test
+    fun parseListOfSchools(){
+        val yaml = """
+            - 
+                id: 2543
+                name: ISEL
+                location:
+                    street: Rua Conselheiro Emídio Navarro
+                    nr: 1
+                    city: Lisbon
+                established: 1852
+            - 
+                id: 7035
+                name: IST
+                location:
+                    street: Avenida Rovisco Pais
+                    nr: 1
+                    city: Lisbon
+                established: 1911
+        """.trimIndent()
+        val schools = YamlParserCojen.yamlParser(School::class).parseList(yaml.reader())
+        assertEquals(2, schools.size)
+        val s1 = schools[0]
+        assertEquals(2543, s1.id)
+        assertEquals("ISEL", s1.name)
+        assertEquals("Rua Conselheiro Emídio Navarro", s1.address.street)
+        assertEquals(1, s1.address.nr)
+        assertEquals("Lisbon", s1.address.city)
+        assertEquals(1852, s1.founded)
+        val s2 = schools[1]
+        assertEquals(7035, s2.id)
+        assertEquals("IST", s2.name)
+        assertEquals("Avenida Rovisco Pais", s2.address.street)
+        assertEquals(1, s2.address.nr)
+        assertEquals("Lisbon", s2.address.city)
+        assertEquals(1911, s2.founded)
+    }
+
+    @Test
+    fun ParseYamlConvert(){
+        val yaml = """
+            name: Dragao
+            date: 2004-02-02
+                """.trimIndent()
+        val schools = YamlParserCojen.yamlParser(Books::class).parseObject(yaml.reader())
+        assertEquals( schools.name , "Dragao" )
+        assertEquals(  schools.date, LocalDate.of(2004, 2, 2) )
+
     }
 }
