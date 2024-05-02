@@ -16,7 +16,7 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
 
     private val argKParameterName = mutableMapOf<KParameter, String>()
 
-    private val yamlConvertMap =mutableMapOf<KParameter, KClass<*>?>()
+    private val yamlConvertMap = mutableMapOf<KParameter, KClass<*>?>()
 
     private val conversionMap = mutableMapOf<KClass<*>, (KParameter, Any) -> Any>()
 
@@ -30,7 +30,6 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
             }
             conversionMap[paramType] = primitiveMap[paramType] ?: when (paramType) {
                 List::class -> convertList(param)
-                Sequence::class -> convertSequence(param)
                 else -> {
                     val valueType =
                         if(yamlConvertMap[param] == null)
@@ -106,18 +105,10 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
         }
     }
 
-    private fun convertSequence(param: KParameter): (KParameter, Any) -> Any {
-        val parser = yamlParser(param.type.arguments[0].type!!.jvmErasure)
-        return { _, v: Any ->
-            @Suppress("UNCHECKED_CAST")
-            (v as Iterable<Map<String, Any>>).map { parser.newInstance(it) }.asSequence()
-        }
-    }
-
+    @Suppress("UNCHECKED_CAST")
     private fun convertRefTypes(value: Any): (KParameter, Any) -> Any {
         // Nested Objects
         if(value == Map::class) return { p: KParameter, v: Any ->
-            @Suppress("UNCHECKED_CAST")
             yamlParser(p.type.jvmErasure).newInstance(v as Map<String, Any>)
         } else return ret@ { p: KParameter, v: Any ->
             if(yamlConvertMap.containsKey(p)){

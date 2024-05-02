@@ -1,14 +1,13 @@
 package pt.isel
 
+import java.lang.reflect.ParameterizedType
 import org.cojen.maker.ClassMaker
-import org.cojen.maker.MethodMaker
-import org.cojen.maker.Variable
-import java.lang.reflect.Parameter
 import kotlin.reflect.KClass
+
 /**
  * A YamlParser that uses Cojen Maker to generate a parser.
  */
-open class YamlParserCojen<T : Any>(
+open class YamlParserCojen<T : Any> protected constructor(
     private val type: KClass<T>,
     private val nrOfInitArgs: Int)
 : AbstractYamlParser<T>(type) {
@@ -23,6 +22,7 @@ open class YamlParserCojen<T : Any>(
          * Creates a YamlParser for the given type using Cojen Maker if it does not already exist.
          * Keep it in an internal cache.
          */
+        @Suppress("UNCHECKED_CAST")
         fun <T : Any> yamlParser(type: KClass<T>, nrOfInitArgs: Int = type.constructors.first().parameters.size): AbstractYamlParser<T> {
             return yamlParsers.getOrPut(parserName(type, nrOfInitArgs)) {
                 YamlParserCojen(type, nrOfInitArgs)
@@ -38,6 +38,10 @@ open class YamlParserCojen<T : Any>(
      */
     override fun <T : Any> yamlParser(type: KClass<T>) = YamlParserCojen.yamlParser(type)
 
+    fun <T : Any> yamlParser(type: Class<T>): AbstractYamlParser<T>{
+        return yamlParser(type.kotlin)
+    }
+
     /**
      * Do not change this method in YamlParserCojen.
      */
@@ -46,7 +50,90 @@ open class YamlParserCojen<T : Any>(
     }
 
     private fun buildYamlParser() : ClassMaker {
-        TODO()
+        return ClassMaker
+            .begin("YamlParser${type.simpleName}${nrOfInitArgs}")
+            .public_()
+            .extend(YamlParserCojen::class.java)
+            .apply {
+                addConstructor(KClass::class.java, Integer::class.java)
+                    .public_()
+                    .also { ctor ->
+                        ctor.invokeSuperConstructor(ctor.param(0), ctor.param(1))
+                    }
+                if(type.javaPrimitiveType == null && type != String::class)
+                    addParseMethod(type)
+            }
+
+    }
+
+    private fun ClassMaker.addParseMethod(destType: KClass<T>) {
+        val javaType = destType.java
+        // get the right constructor
+        val destInit = javaType
+            .constructors.first {
+                it.parameters.size == nrOfInitArgs
+            }
+
+        // add the parse method
+        addMethod(Any::class.java, "newInstance", Map::class.java)
+            .public_()
+            .apply {
+                val argValues = destInit.parameters.map { param ->
+                    val paramName = param.getAnnotation(YamlArg::class.java)?.paramName ?: param.name
+                    val paramValue = param(0).invoke("get", paramName)
+                    val yamlConvertCls = param.getAnnotation(YamlConvert::class.java)?.newClass?.java
+                    if(yamlConvertCls != null){
+                        val clsInstance = new_(yamlConvertCls)
+                        val methodName = yamlConvertCls.declaredMethods.first().name
+                        clsInstance.invoke(methodName, paramValue.cast(String::class.java))
+                    } else {
+                        when (val v = param.type) {
+                            String::class.java -> paramValue.cast(String::class.java)
+                            Int::class.java ->
+                                `var`(v).invoke("parseInt", paramValue.cast(String::class.java))
+                            Short::class.java ->
+                                `var`(v).invoke("parseShort", paramValue.cast(String::class.java))
+                            Long::class.java ->
+                                `var`(v).invoke("parseLong", paramValue.cast(String::class.java))
+                            Boolean::class.java ->
+                                `var`(v).invoke("parseBoolean", paramValue.cast(String::class.java))
+                            Double::class.java ->
+                                `var`(v).invoke("parseDouble", paramValue.cast(String::class.java))
+                            Float::class.java ->
+                                `var`(v).invoke("parseFloat", paramValue.cast(String::class.java))
+                            Byte::class.java ->
+                                `var`(v).invoke("parseByte", paramValue.cast(String::class.java))
+                            List::class.java -> {
+                                val argSeq = paramValue.cast(v)
+                                val elemType =
+                                    (destInit.parameters.first { it.name == param.name }.parameterizedType as ParameterizedType)
+                                        .actualTypeArguments[0] as Class<*>
+                                val parser = super_().invoke("yamlParser", elemType)
+                                val argSeqSize = argSeq.invoke("size").cast(Int::class.java) // argSeq.size()
+                                val i = `var`(Int::class.java).set(0) // i = 0
+                                val retList = new_(ArrayList::class.java, argSeqSize)
+                                val endLabel = label()
+                                val startLabel = label().here()
+                                i.ifGe(argSeqSize, endLabel) // i >= argSeq.size()
+                                val elemMap =
+                                    argSeq.invoke("get", i.cast(Int::class.java)).cast(Map::class.java)
+                                val parsedElem = parser.invoke("newInstance", elemMap).cast(elemType)
+                                retList.invoke("add", parsedElem)
+                                i.inc(1) // i++
+                                goto_(startLabel)
+                                endLabel.here()
+                                return@map retList
+                            }
+
+                            else -> super_()
+                                .invoke("yamlParser", v)
+                                .invoke("newInstance", paramValue.cast(Map::class.java))
+                                .cast(v)
+                        }
+                    }
+                }
+                return_(new_(javaType, *argValues.toTypedArray()))
+            }
     }
 }
 
