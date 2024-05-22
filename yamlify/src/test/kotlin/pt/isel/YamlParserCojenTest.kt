@@ -1,8 +1,10 @@
 package pt.isel
 
 import java.time.LocalDate
+import org.junit.jupiter.api.assertThrows
 import pt.isel.test.Books
 import pt.isel.test.Classroom
+import pt.isel.test.Professor
 import pt.isel.test.School
 import pt.isel.test.Student
 import kotlin.test.Test
@@ -250,7 +252,7 @@ class YamlParserCojenTest {
     }
 
     @Test
-    fun ParseYamlConvert(){
+    fun parseYamlConvert(){
         val yaml = """
             name: Dragao
             date: 2004-02-02
@@ -259,5 +261,43 @@ class YamlParserCojenTest {
         assertEquals( schools.name , "Dragao" )
         assertEquals(  schools.date, LocalDate.of(2004, 2, 2) )
 
+    }
+
+    @Test
+    fun parseSequenceOfProfessors(){
+        val yaml = """
+            -
+                id: 99203
+                name: Professor A
+            -
+                id: 54632
+                name: Professor B
+        """.trimIndent()
+        val seq = YamlParserCojen.yamlParser(Professor::class).parseSequence(yaml.reader()).iterator()
+        assertEquals(0, Professor.counter)
+        val p1 = seq.next()
+        assertEquals("Professor A", p1.name)
+        assertEquals(99203, p1.id)
+        assertEquals(1, Professor.counter)
+        val p2 = seq.next()
+        assertEquals("Professor B", p2.name)
+        assertEquals(54632, p2.id)
+        assertEquals(2, Professor.counter)
+    }
+
+    @Test
+    fun parseSequenceThrowsForNonList(){
+        val yaml = """
+            id: 2543
+            name: ISEL
+            location:
+                street: Rua Conselheiro Emídio Navarro
+                nr: 1
+                city: Lisbon
+            established: 1852
+        """.trimIndent()
+        assertThrows<IllegalArgumentException> {
+            YamlParserCojen.yamlParser(School::class).parseSequence(yaml.reader())
+        }
     }
 }

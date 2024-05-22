@@ -64,10 +64,11 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 paramsMap[trimmedKey] = value.trim()
             } else {
                 val nextValue = getNextLine(iter, ":").second.also { iter.previous() }
-                if(nextValue.isBlank())
-                    paramsMap[trimmedKey] = yamlToList(iter, countLeadingSpaces(key))
-                else
-                    paramsMap[trimmedKey] = yamlToMap(iter)
+                paramsMap[trimmedKey] =
+                    if (nextValue.isBlank())
+                        yamlToList(iter, countLeadingSpaces(key))
+                    else
+                        yamlToMap(iter)
             }
 
             if (!iter.hasNext())
@@ -105,5 +106,34 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             while(iter.hasNext())
                 mutableList += primitiveMap[type]!!(getNextLine(iter, "-").second.trim()) as T
         return mutableList
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun parseSequence(yaml: Reader): Sequence<T> {
+        val lines = yaml.readLines()
+        if(lines[0].trim() != "-")
+            throw IllegalArgumentException("The sequence must start with a '-'")
+
+        val iter = lines.filter { it.isNotBlank() }.listIterator()
+        val (key, _) = getNextLine(iter, "-").also {
+            iter.previous()
+        }
+
+        val objects = yamlToList(iter, countLeadingSpaces(key))
+        return sequence {
+            for(obj in objects){
+                yield(newInstance(obj as Map<String, Any>))
+            }
+        }
+    }
+
+    fun parseFolderEager(path: String): List<T> {
+        val file = java.io.File(path).reader()
+        return parseList(file)
+    }
+
+    fun parseFolderLazy(path: String): Sequence<T> {
+        val file = java.io.File(path).reader()
+        return parseSequence(file)
     }
 }

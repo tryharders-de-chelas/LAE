@@ -97,10 +97,10 @@ class YamlParserReflect<T : Any> private constructor(type: KClass<T>) : Abstract
         return ctor.callBy(ctorArgs)
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun convertList(param: KParameter): (KParameter, Any) -> Any {
         val parser = yamlParser(param.type.arguments[0].type!!.jvmErasure)
         return { _, v: Any ->
-            @Suppress("UNCHECKED_CAST")
             (v as List<Map<String, Any>>).map { parser.newInstance(it) }
         }
     }

@@ -6,10 +6,10 @@ import pt.isel.test.Classroom
 import pt.isel.test.School
 import pt.isel.test.Student
 import java.time.LocalDate
+import pt.isel.test.Professor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class YamlParserReflectTest {
 
@@ -307,7 +307,42 @@ class YamlParserReflectTest {
         assertFalse { seq.hasNext() }
     }
 
+    @Test fun parseSequenceOfProfessors(){
+        val yaml = """
+            -
+                id: 99203
+                name: Professor A
+             -
+                id: 54632
+                name: Professor B
+        """.trimIndent()
+        val seq = YamlParserReflect.yamlParser(Professor::class).parseSequence(yaml.reader()).iterator()
+        assertEquals(0, Professor.counter)
+        val p1 = seq.next()
+        assertEquals("Professor A", p1.name)
+        assertEquals(99203, p1.id)
+        assertEquals(1, Professor.counter)
+        val p2 = seq.next()
+        assertEquals("Professor B", p2.name)
+        assertEquals(54632, p2.id)
+        assertEquals(2, Professor.counter)
+    }
 
+    @Test
+    fun parseSequenceThrowsForNonList(){
+        val yaml = """
+            id: 2543
+            name: ISEL
+            location:
+                street: Rua Conselheiro Emídio Navarro
+                nr: 1
+                city: Lisbon
+            established: 1852
+        """.trimIndent()
+        assertThrows<IllegalArgumentException> {
+            YamlParserReflect.yamlParser(School::class).parseSequence(yaml.reader())
+        }
+    }
 
 
 
