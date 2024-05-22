@@ -1,8 +1,11 @@
 package pt.isel
 
+import java.io.File
 import java.io.Reader
+import kotlin.random.Random
 import kotlin.reflect.KClass
 
+@Suppress("UNCHECKED_CAST")
 abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlParser<T> {
     /**
      * Used to get a parser for other Type using this same parsing approach.
@@ -29,6 +32,20 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
             }
         }
         return key to value
+    }
+
+    private fun yamlToSequence(iter: ListIterator<String>): Sequence<T> {
+        return sequence {
+            val (_, value) = getNextLine(iter, ":")
+            while(true){
+                if (value.isBlank()){
+                    yield(newInstance(yamlToMap(iter)))
+                } else {
+                    yield(primitiveMap[type]!!(value) as T)
+                }
+                if(iter.hasNext()) iter.next() else break
+            }
+        }
     }
 
     private fun yamlToList(iter: ListIterator<String>, baseIndent: Int): List<Any> {
@@ -64,10 +81,11 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
                 paramsMap[trimmedKey] = value.trim()
             } else {
                 val nextValue = getNextLine(iter, ":").second.also { iter.previous() }
-                if(nextValue.isBlank())
-                    paramsMap[trimmedKey] = yamlToList(iter, countLeadingSpaces(key))
-                else
-                    paramsMap[trimmedKey] = yamlToMap(iter)
+                paramsMap[trimmedKey] =
+                    if (nextValue.isBlank())
+                        yamlToList(iter, countLeadingSpaces(key))
+                    else
+                        yamlToMap(iter)
             }
 
             if (!iter.hasNext())
@@ -90,20 +108,53 @@ abstract class AbstractYamlParser<T : Any>(private val type: KClass<T>) : YamlPa
         return newInstance(yamlToMap(iter))
     }
 
-    @Suppress("UNCHECKED_CAST")
     final override fun parseList(yaml: Reader): List<T> {
         val iter = yaml.readLines().filter { it.isNotBlank() }.listIterator()
         val (key, value) = getNextLine(iter, "-").also {
             iter.previous()
         }
-
         val mutableList: MutableList<T> = mutableListOf()
-        if(value.isBlank())
-            while(iter.hasNext())
+        while(iter.hasNext())
+            if(value.isBlank())
                 mutableList += yamlToList(iter, countLeadingSpaces(key)).map { newInstance(it as Map<String, Any>) }
-        else
-            while(iter.hasNext())
+            else
                 mutableList += primitiveMap[type]!!(getNextLine(iter, "-").second.trim()) as T
         return mutableList
+    }
+
+    fun parseSequence(yaml: Reader): Sequence<T> {
+        val iter = yaml.readLines().filter { it.isNotBlank() }.listIterator()
+        val (k, _) = getNextLine(iter, ":").also { iter.previous() }
+        if(k.trim() != "-")
+            throw IllegalArgumentException("Invalid YAML format: Expected sequence to start with a '-' but found '${k.trim()}' instead. Please ensure the YAML sequence is correctly formatted.")
+        return yamlToSequence(iter)
+    }
+
+    fun parseFolderEager(path: String): List<T> {
+        val directory = File(path)
+        val files = directory.listFiles()
+            ?.filter { it.isFile }
+            ?.map { file: File ->
+                parseObject(file.reader()).also { file.renameTo(File("$directory/${Random.nextLong(Long.MAX_VALUE)}.yaml")) }
+            } ?: emptyList()
+        return files
+    }
+
+    fun parseFolderLazy(path: String): Sequence<T> {
+        val directory = File(path)
+        val files = directory.listFiles()?.filter { it.isFile }?.iterator() ?: emptyList<File>().iterator()
+        return object : Sequence<T>{
+            override fun iterator(): Iterator<T> {
+                return object : Iterator<T> {
+                    override fun hasNext(): Boolean = files.hasNext()
+                    override fun next(): T {
+                        val file = files.next()
+                        return parseObject(file.reader()).also {
+                            file.renameTo(File("$directory/${Random.nextLong(Long.MAX_VALUE)}.yaml"))
+                        }
+                    }
+                }
+            }
+        }
     }
 }
