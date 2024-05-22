@@ -1,5 +1,6 @@
 package pt.isel
 
+import java.io.File
 import java.time.LocalDate
 import org.junit.jupiter.api.assertThrows
 import pt.isel.test.Books
@@ -10,6 +11,7 @@ import pt.isel.test.Student
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class YamlParserCojenTest {
 
@@ -274,15 +276,15 @@ class YamlParserCojenTest {
                 name: Professor B
         """.trimIndent()
         val seq = YamlParserCojen.yamlParser(Professor::class).parseSequence(yaml.reader()).iterator()
-        assertEquals(0, Professor.counter)
+        var counter = Professor.counter
         val p1 = seq.next()
         assertEquals("Professor A", p1.name)
         assertEquals(99203, p1.id)
-        assertEquals(1, Professor.counter)
+        assertEquals(++counter, Professor.counter)
         val p2 = seq.next()
         assertEquals("Professor B", p2.name)
         assertEquals(54632, p2.id)
-        assertEquals(2, Professor.counter)
+        assertEquals(++counter, Professor.counter)
     }
 
     @Test
@@ -299,5 +301,93 @@ class YamlParserCojenTest {
         assertThrows<IllegalArgumentException> {
             YamlParserCojen.yamlParser(School::class).parseSequence(yaml.reader())
         }
+    }
+
+    @Test
+    fun parseFolderEager(){
+        val directoryPath = "src/test/resources"
+        val fileNames = File(directoryPath).listFiles()?.map { it.name }!!
+        val students = YamlParserCojen.yamlParser(Student::class).parseFolderEager(directoryPath)
+        val newFileNames = File(directoryPath).listFiles()?.map { it.name }!!
+        assertFalse { newFileNames.contains(fileNames[0]) }
+        assertFalse { newFileNames.contains(fileNames[1]) }
+        assertEquals(2, students.size)
+        val st1 = students[0]
+        assertEquals("Maria Candida", st1.name)
+        assertEquals(873435, st1.nr)
+        assertEquals("Oleiros", st1.from)
+        assertEquals("Rua Rosa", st1.address?.street)
+        assertEquals(78, st1.address?.nr)
+        assertEquals("Lisbon", st1.address?.city)
+        val grades1 = st1.grades.iterator()
+        val g1 = grades1.next()
+        assertEquals("LAE", g1.subject)
+        assertEquals(18, g1.classification)
+        val g2 = grades1.next()
+        assertEquals("PDM", g2.subject)
+        assertEquals(15, g2.classification)
+        val g3 = grades1.next()
+        assertEquals("PC", g3.subject)
+        assertEquals(19, g3.classification)
+        assertFalse { grades1.hasNext() }
+        val st2 = students[1]
+        assertEquals("Jose Carioca", st2.name)
+        assertEquals(1214398, st2.nr)
+        assertEquals("Tamega", st2.from)
+        assertEquals("Rua Azul", st2.address?.street)
+        assertEquals(12, st2.address?.nr)
+        assertEquals("Porto", st2.address?.city)
+        val grades2 = st2.grades.iterator()
+        val g4 = grades2.next()
+        assertEquals("TDS", g4.subject)
+        assertEquals(20, g4.classification)
+        val g5 = grades2.next()
+        assertEquals("LAE", g5.subject)
+        assertEquals(18, g5.classification)
+        assertFalse { grades2.hasNext() }
+    }
+
+    @Test
+    fun parseFolderLazy(){
+        val directoryPath = "src/test/resources"
+        val fileNames = File(directoryPath).listFiles()?.map { it.name }!!
+        val seq = YamlParserCojen.yamlParser(Student::class).parseFolderLazy(directoryPath).iterator()
+        val st1 = seq.next()
+        assertFalse { File(directoryPath).listFiles()?.map { it.name }!!.contains(fileNames[0]) }
+        assertTrue { File(directoryPath).listFiles()?.map { it.name }!!.contains(fileNames[1]) }
+        assertEquals("Maria Candida", st1.name)
+        assertEquals(873435, st1.nr)
+        assertEquals("Oleiros", st1.from)
+        assertEquals("Rua Rosa", st1.address?.street)
+        assertEquals(78, st1.address?.nr)
+        assertEquals("Lisbon", st1.address?.city)
+        val grades1 = st1.grades.iterator()
+        val g1 = grades1.next()
+        assertEquals("LAE", g1.subject)
+        assertEquals(18, g1.classification)
+        val g2 = grades1.next()
+        assertEquals("PDM", g2.subject)
+        assertEquals(15, g2.classification)
+        val g3 = grades1.next()
+        assertEquals("PC", g3.subject)
+        assertEquals(19, g3.classification)
+        assertFalse { grades1.hasNext() }
+        val st2 = seq.next()
+        assertFalse { File(directoryPath).listFiles()?.map { it.name }!!.contains(fileNames[1]) }
+        assertEquals("Jose Carioca", st2.name)
+        assertEquals(1214398, st2.nr)
+        assertEquals("Tamega", st2.from)
+        assertEquals("Rua Azul", st2.address?.street)
+        assertEquals(12, st2.address?.nr)
+        assertEquals("Porto", st2.address?.city)
+        val grades2 = st2.grades.iterator()
+        val g4 = grades2.next()
+        assertEquals("TDS", g4.subject)
+        assertEquals(20, g4.classification)
+        val g5 = grades2.next()
+        assertEquals("LAE", g5.subject)
+        assertEquals(18, g5.classification)
+        assertFalse { grades2.hasNext() }
+        assertFalse { seq.hasNext() }
     }
 }

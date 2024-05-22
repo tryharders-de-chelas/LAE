@@ -7,5 +7,6 @@ class Professor(val id: Int, val name: String){
 
     companion object {
         var counter = 0
+            private set
     }
 }
